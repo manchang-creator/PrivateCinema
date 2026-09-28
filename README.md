@@ -90,6 +90,16 @@ struct MyServerProvider: MediaProvider {
 把 `mp4 / m4v / mov` 文件放进 App 的 `Documents/MediaLibrary/`
 （通过"文件"App），即可在"本机媒体库"中浏览和播放。
 
+## CI 自动化
+
+仓库配置了 GitHub Actions（`.github/workflows/ios-build.yml`），在 macOS runner 上：
+
+- 每次 push 自动用 Xcode 编译验证；
+- 编译后在 iPhone 模拟器自动导航截图（首页 / 详情 / 播放器 / 片库 / 设置 / 深色首页），
+  到 Actions 运行页面的 Artifacts 下载 `app-screenshots` 即可预览界面；
+- 工程由 XcodeGen 管理，CI 上执行 `xcodegen generate` 后构建。
+  本地如需跑 UI 测试（`PrivateCinemaUITests`），同样先执行 `xcodegen generate`。
+
 ## 后续路线（P2）
 
 - WebDAV / Jellyfin / Emby / Plex Provider

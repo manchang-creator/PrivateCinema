@@ -1,7 +1,7 @@
-name: iOS 编译检查
+name: iOS 编译检查与截图预览
 
-# 每次 push 到 main 自动编译；也可在 Actions 页面手动触发。
-# 用途：本仓库开发环境无 Mac，用 GitHub 免费托管 macOS runner 验证编译。
+# 每次 push 到 main 自动触发；也可在 Actions 页面手动触发。
+# 本仓库开发环境无 Mac：CI 负责编译验证 + 模拟器自动导航截图预览。
 
 on:
   push:
@@ -15,13 +15,19 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 镜像预装多个 Xcode，选 16 及以上的最新版本（工程为 Xcode 16 文件格式）
+      # 镜像预装多个 Xcode，选 16 及以上的最新版本
       - name: 选择 Xcode 16+
         run: |
           ls -d /Applications/Xcode*.app
           XCODE_PATH=$(ls -d /Applications/Xcode*.app | sort -V | grep -E "Xcode_(1[6-9]|2[0-9])" | tail -1)
           sudo xcode-select -s "$XCODE_PATH"
           xcodebuild -version
+
+      # 工程由 XcodeGen 管理：CI 上重新生成，确保包含 UI 测试 target
+      - name: 安装 XcodeGen 并生成工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
 
       # generic 模拟器目标不依赖具体机型名称；模拟器构建无需签名
       - name: 编译（iOS 模拟器目标）
@@ -32,3 +38,52 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: 启动 iPhone 模拟器
+        run: |
+          UDID=$(xcrun simctl list devices available | grep -m1 "iPhone" | grep -oE "[A-F0-9-]{36}" | head -1)
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID"
+
+      - name: 运行 UI 测试生成截图
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project PrivateCinema.xcodeproj \
+            -scheme PrivateCinema \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
+            -resultBundlePath ScreenshotResult.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -60 \
+            || echo "::warning::UI 测试未全部通过，已捕获的截图仍会上传"
+
+      - name: 导出截图
+        if: always()
+        run: |
+          mkdir -p screenshots
+          xcrun xcresulttool export attachments \
+            --path ScreenshotResult.xcresult \
+            --output-path screenshots \
+            || echo "::warning::截图导出失败"
+          python3 - <<'PY'
+          import json, os, shutil
+          p = os.path.join("screenshots", "manifest.json")
+          if os.path.exists(p):
+              with open(p, encoding="utf-8") as f:
+                  data = json.load(f)
+              for a in data.get("attachments", []):
+                  src = os.path.join("screenshots", a.get("exportedFileName", ""))
+                  name = a.get("suggestedHumanReadableName") or ""
+                  if src and os.path.exists(src) and name:
+                      ext = os.path.splitext(src)[1] or ".png"
+                      shutil.copyfile(src, os.path.join("screenshots", name + ext))
+          PY
+          ls screenshots | head -30
+
+      - name: 上传截图产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-screenshots
+          path: screenshots
+          if-no-files-found: warn

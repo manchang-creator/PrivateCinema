@@ -42,6 +42,8 @@ struct PosterCard: View {
                 .lineLimit(1)
         }
         .contentShape(Rectangle())
+        // UI 测试定位海报入口用
+        .accessibilityIdentifier("poster-card")
     }
 }
 

@@ -27,3 +27,24 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  PrivateCinemaUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: PrivateCinemaUITests
+    dependencies:
+      - target: PrivateCinema
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.private.PrivateCinemaUITests
+        TEST_TARGET_NAME: PrivateCinema
+schemes:
+  PrivateCinema:
+    build:
+      targets:
+        PrivateCinema: all
+        PrivateCinemaUITests: [test]
+    test:
+      targets:
+        - PrivateCinemaUITests
