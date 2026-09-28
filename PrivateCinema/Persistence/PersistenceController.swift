@@ -20,14 +20,14 @@ struct PersistenceController {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: inMemory)
         do {
             container = try ModelContainer(
-                for: Self.schemaModels,
+                for: Schema(Self.schemaModels),
                 configurations: [configuration]
             )
         } catch {
             // 个人应用兜底：持久层失败时退化为内存模式，保证 App 可用。
             let fallback = ModelConfiguration(isStoredInMemoryOnly: true)
             container = (try? ModelContainer(
-                for: Self.schemaModels,
+                for: Schema(Self.schemaModels),
                 configurations: [fallback]
             )) ?? Self.emptyContainer()
         }
@@ -36,7 +36,7 @@ struct PersistenceController {
     /// 极端情况下（容器创建彻底失败）的最终兜底。
     private static func emptyContainer() -> ModelContainer {
         let fallback = ModelConfiguration(isStoredInMemoryOnly: true)
-        return try! ModelContainer(for: Self.schemaModels, configurations: [fallback])
+        return try! ModelContainer(for: Schema(Self.schemaModels), configurations: [fallback])
     }
 
     /// 未来接入 iCloud 同步：为对应 Record 提供

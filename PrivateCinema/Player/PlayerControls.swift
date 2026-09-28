@@ -254,7 +254,7 @@ struct PlayerControls: View {
         }
     }
 
-    private var bottomButtonStyle: some PrimitiveButtonStyle {
+    private var bottomButtonStyle: some ButtonStyle {
         BottomIconButtonStyle()
     }
 
@@ -266,7 +266,8 @@ struct PlayerControls: View {
 }
 
 /// 底部小圆形按钮样式。
-struct BottomIconButtonStyle: PrimitiveButtonStyle {
+/// 使用 ButtonStyle（而非 PrimitiveButtonStyle）：只有前者提供 isPressed。
+struct BottomIconButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(.white)
