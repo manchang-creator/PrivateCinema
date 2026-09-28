@@ -1,3 +1,4 @@
+import SwiftUI
 import UIKit
 
 /// 高性能弹幕渲染器。
