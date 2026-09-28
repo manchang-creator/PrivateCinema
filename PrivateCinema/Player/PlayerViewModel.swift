@@ -8,10 +8,12 @@ import UIKit
 @Observable
 final class PlayerViewModel {
 
-    enum ControlSheet: Hashable {
+    enum ControlSheet: Hashable, Identifiable {
         case danmakuSettings
         case subtitleSettings
         case trackPicker
+
+        var id: Self { self }
     }
 
     // MARK: - 依赖
@@ -21,7 +23,7 @@ final class PlayerViewModel {
     var danmaku: DanmakuManager { environment.danmaku }
     let subtitles = SubtitleManager()
     /// 弹幕渲染视图（由 PlayerView 挂载为覆盖层）
-    let renderer = DanmakuRendererView()
+    let renderer = DanmakuRendererView(frame: .zero)
 
     // MARK: - 播放上下文
 
@@ -203,8 +205,10 @@ final class PlayerViewModel {
                 guard let self, !Task.isCancelled else { return }
                 remaining -= 1
                 self.nextCountdownSeconds = remaining > 0 ? remaining : nil
+                if remaining == 0 {
+                    await self.play(episode: episode)
+                }
             }
-            await self.play(episode: episode)
         }
     }
 
@@ -317,10 +321,9 @@ final class PlayerViewModel {
     func loadTrackOptions() async {
         guard let item = manager.player.currentItem else { return }
         do {
-            let audioGroups = try await item.asset.loadMediaSelectionGroups(for: .audible)
             var audio: [TrackSelection] = []
             var id = 0
-            for group in audioGroups {
+            if let group = try await item.asset.loadMediaSelectionGroup(for: .audible) {
                 for option in group.options {
                     audio.append(TrackSelection(id: id, name: option.displayName, group: group, option: option))
                     id += 1
@@ -329,10 +332,9 @@ final class PlayerViewModel {
             audioTracks = audio
             selectedAudioTrackID = audio.first?.id
 
-            let subtitleGroups = try await item.asset.loadMediaSelectionGroups(for: .legible)
             var subtitleOptions: [TrackSelection] = []
             id = 1000
-            for group in subtitleGroups {
+            if let group = try await item.asset.loadMediaSelectionGroup(for: .legible) {
                 for option in group.options {
                     subtitleOptions.append(TrackSelection(id: id, name: option.displayName, group: group, option: option))
                     id += 1

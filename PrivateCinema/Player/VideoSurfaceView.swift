@@ -25,7 +25,7 @@ struct VideoSurfaceView: UIViewRepresentable {
     var onAttach: (AVPlayerLayer) -> Void = { _ in }
 
     func makeUIView(context: Context) -> PlayerContainerView {
-        let view = PlayerContainerView()
+        let view = PlayerContainerView(frame: .zero)
         view.player = player
         view.onTap = onTap
         view.onHoldChanged = onHoldChanged

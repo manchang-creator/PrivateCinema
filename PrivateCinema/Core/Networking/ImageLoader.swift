@@ -55,7 +55,7 @@ actor ImageLoader {
     var diskCacheSize: Int {
         (try? FileManager.default.contentsOfDirectory(at: diskDirectory, includingPropertiesForKeys: [.fileSizeKey]))?
             .reduce(0) { sum, url in
-                sum + (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+                sum + ((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
             } ?? 0
     }
 

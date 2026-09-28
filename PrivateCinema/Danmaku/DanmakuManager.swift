@@ -62,9 +62,9 @@ final class DanmakuManager {
             if blockedUsers.contains(item.userId) { return false }
             if spoiler.isBlocked(item.content) { return false }
             switch item.type {
-            case .scroll: return settings.allowScroll
-            case .top: return settings.allowTop
-            case .bottom: return settings.allowBottom
+            case .scroll: return !settings.blockScroll
+            case .top: return !settings.blockTop
+            case .bottom: return !settings.blockBottom
             }
         }
     }
