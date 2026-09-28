@@ -67,16 +67,21 @@ jobs:
             || echo "::warning::截图导出失败"
           python3 - <<'PY'
           import json, os, shutil
-          p = os.path.join("screenshots", "manifest.json")
-          if os.path.exists(p):
-              with open(p, encoding="utf-8") as f:
-                  data = json.load(f)
-              for a in data.get("attachments", []):
-                  src = os.path.join("screenshots", a.get("exportedFileName", ""))
-                  name = a.get("suggestedHumanReadableName") or ""
-                  if src and os.path.exists(src) and name:
-                      ext = os.path.splitext(src)[1] or ".png"
-                      shutil.copyfile(src, os.path.join("screenshots", name + ext))
+          try:
+              p = os.path.join("screenshots", "manifest.json")
+              if os.path.exists(p):
+                  with open(p, encoding="utf-8") as f:
+                      data = json.load(f)
+                  # manifest 顶层可能是数组，也可能带 attachments 键
+                  items = data if isinstance(data, list) else data.get("attachments", [])
+                  for a in items:
+                      src = os.path.join("screenshots", a.get("exportedFileName", ""))
+                      # suggested name 形如 "01-首页_0_<uuid>"，截取友好名
+                      name = (a.get("suggestedHumanReadableName") or "").split("_")[0]
+                      if src and os.path.exists(src) and name:
+                          os.replace(src, os.path.join("screenshots", name + ".png"))
+          except Exception as e:
+              print("rename skipped:", e)
           PY
           ls screenshots | head -30
 
