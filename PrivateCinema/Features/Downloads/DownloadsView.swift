@@ -133,7 +133,7 @@ struct DownloadRow: View {
         switch task.state {
         case .failed: return .red
         case .completed: return .green
-        default: return .tint
+        default: return .accentColor
         }
     }
 

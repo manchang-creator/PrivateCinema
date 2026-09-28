@@ -108,7 +108,7 @@ struct HistoryRow: View {
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule().fill(.quaternary)
-                        Capsule().fill(progress.completed ? Color.green : Color.tint)
+                        Capsule().fill(progress.completed ? Color.green : Color.accentColor)
                             .frame(width: proxy.size.width * progress.percent)
                     }
                 }
