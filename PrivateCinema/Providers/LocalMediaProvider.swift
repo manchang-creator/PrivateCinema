@@ -43,7 +43,7 @@ struct LocalMediaProvider: MediaProvider {
             id: "local-\(index)-\(file.name)",
             title: file.name,
             kind: .movie,
-            year: Calendar.current.component(.year, from: file.url.creationDate ?? .now),
+            year: Calendar.current.component(.year, from: (try? file.url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .now),
             area: "本地",
             language: "未知",
             genres: ["本地文件"],

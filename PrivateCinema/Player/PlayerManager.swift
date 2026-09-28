@@ -23,8 +23,8 @@ final class PlayerManager: NSObject {
     let player = AVPlayer()
 
     private(set) var state: PlaybackState = .idle
-    /// 当前播放条目（MiniPlayer 数据源；退出全屏后仍保留）
-    private(set) var activeRequest: PlaybackRequest?
+    /// 当前播放条目（MiniPlayer 数据源；由 PlayerViewModel 在 prepare 时写入）
+    var activeRequest: PlaybackRequest?
     /// 全屏播放页的呈现绑定（MiniPlayer 点按后重新打开）
     var fullscreenRequest: PlaybackRequest?
 
@@ -50,7 +50,8 @@ final class PlayerManager: NSObject {
     private var statusCancellable: AnyCancellable?
     private var endCancellable: AnyCancellable?
     private var durationLoadTask: Task<Void, Never>?
-    private var timeObserver: Any?
+    /// 时间观测 token：init 后只读；deinit 在非隔离上下文读取，故不参与隔离检查。
+    nonisolated(unsafe) private var timeObserver: Any?
     private let volumeController = VolumeController()
 
     // MARK: - 初始化

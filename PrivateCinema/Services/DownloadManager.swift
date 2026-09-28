@@ -131,7 +131,7 @@ final class DownloadManager {
         update(waiting.id) { $0.state = .downloading }
         let taskID = waiting.id
         let task = Task { [weak self] in
-            await self?.run(taskID: taskID)
+            _ = await self?.run(taskID: taskID)
         }
         runningTasks[taskID] = task
     }
