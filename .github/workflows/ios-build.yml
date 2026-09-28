@@ -72,14 +72,18 @@ jobs:
               if os.path.exists(p):
                   with open(p, encoding="utf-8") as f:
                       data = json.load(f)
-                  # manifest 顶层可能是数组，也可能带 attachments 键
                   items = data if isinstance(data, list) else data.get("attachments", [])
+                  # manifest 每项是测试对象，attachments 嵌在内层
                   for a in items:
-                      src = os.path.join("screenshots", a.get("exportedFileName", ""))
-                      # suggested name 形如 "01-首页_0_<uuid>"，截取友好名
-                      name = (a.get("suggestedHumanReadableName") or "").split("_")[0]
-                      if src and os.path.exists(src) and name:
-                          os.replace(src, os.path.join("screenshots", name + ".png"))
+                      if not isinstance(a, dict):
+                          continue
+                      entries = a["attachments"] if "attachments" in a else [a]
+                      for att in entries:
+                          src = os.path.join("screenshots", att.get("exportedFileName", ""))
+                          # suggested name 形如 "01-首页_0_<uuid>"，截取友好名
+                          name = (att.get("suggestedHumanReadableName") or "").split("_")[0]
+                          if src and os.path.exists(src) and name:
+                              os.replace(src, os.path.join("screenshots", name + ".png"))
           except Exception as e:
               print("rename skipped:", e)
           PY
