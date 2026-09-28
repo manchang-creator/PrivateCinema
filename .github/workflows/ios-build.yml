@@ -1,0 +1,34 @@
+name: iOS 编译检查
+
+# 每次 push 到 main 自动编译；也可在 Actions 页面手动触发。
+# 用途：本仓库开发环境无 Mac，用 GitHub 免费托管 macOS runner 验证编译。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 镜像预装多个 Xcode，选 16 及以上的最新版本（工程为 Xcode 16 文件格式）
+      - name: 选择 Xcode 16+
+        run: |
+          ls -d /Applications/Xcode*.app
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app | sort -V | grep -E "Xcode_(1[6-9]|2[0-9])" | tail -1)
+          sudo xcode-select -s "$XCODE_PATH"
+          xcodebuild -version
+
+      # generic 模拟器目标不依赖具体机型名称；模拟器构建无需签名
+      - name: 编译（iOS 模拟器目标）
+        run: |
+          xcodebuild \
+            -project PrivateCinema.xcodeproj \
+            -scheme PrivateCinema \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
