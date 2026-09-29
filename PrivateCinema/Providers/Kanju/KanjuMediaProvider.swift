@@ -268,8 +268,9 @@ struct KanjuMediaProvider: MediaProvider {
                 resolved = await resolveLine(String(raw.dropFirst("resolve://".count)))
             } else if let raw = option.url,
                       raw.hasPrefix("http"),
-                      kind == "m3u8" || kind == "mp4" {
-                resolved = (url: URL(string: raw), kind: kind)
+                      kind == "m3u8" || kind == "mp4",
+                      let direct = URL(string: raw) {
+                resolved = (url: direct, kind: kind)
             } else {
                 resolved = nil
             }
