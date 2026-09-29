@@ -96,3 +96,51 @@ jobs:
           name: app-screenshots
           path: screenshots
           if-no-files-found: warn
+
+  # 手动触发的未签名 ipa 打包（供 SideStore / AltStore 等手机端自签工具使用）。
+  # 免费签名无法在 CI 完成，由手机上的 SideStore 用个人 Apple ID 完成签名（7 天有效）。
+  package-ipa:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 选择 Xcode 16+
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode*.app | sort -V | grep -E "Xcode_(1[6-9]|2[0-9])" | tail -1)
+          sudo xcode-select -s "$XCODE_PATH"
+          xcodebuild -version
+
+      - name: 安装 XcodeGen 并生成工程
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: 编译真机 Release（未签名）
+        run: |
+          xcodebuild \
+            -project PrivateCinema.xcodeproj \
+            -scheme PrivateCinema \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: 打包为 ipa
+        run: |
+          APP_PATH=$(find build/Build/Products -name "*.app" -maxdepth 3 | head -1)
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry PrivateCinema-unsigned.ipa Payload
+          ls -lh PrivateCinema-unsigned.ipa
+
+      - name: 上传 ipa 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: PrivateCinema-unsigned-ipa
+          path: PrivateCinema-unsigned.ipa
+          if-no-files-found: error
+          
