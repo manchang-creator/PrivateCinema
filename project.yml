@@ -20,6 +20,8 @@ targets:
         CFBundleDisplayName: 私人影院
         UILaunchScreen: {}
         UIBackgroundModes: [audio, picture-in-picture]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         INFOPLIST_FILE: Info.plist
