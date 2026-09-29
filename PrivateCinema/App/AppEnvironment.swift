@@ -25,13 +25,21 @@ final class AppEnvironment {
     // MARK: - 媒体源
 
     let providers: [MediaProvider]
-    var activeProviderID: String {
-        get { UserDefaults.standard.string(forKey: "provider.active") ?? "mock" }
-        set { UserDefaults.standard.set(newValue, forKey: "provider.active") }
+    /// 当前内容源（持久化；做成存储属性以获得 @Observable 通知）
+    var activeProviderID: String =
+        UserDefaults.standard.string(forKey: "provider.active") ?? "mock" {
+        didSet {
+            UserDefaults.standard.set(activeProviderID, forKey: "provider.active")
+        }
     }
 
     var mediaProvider: MediaProvider {
         providers.first { $0.info.id == activeProviderID } ?? providers[0]
+    }
+
+    func setActiveProvider(_ id: String) {
+        guard providers.contains(where: { $0.info.id == id }) else { return }
+        activeProviderID = id
     }
 
     // MARK: - Init
@@ -66,7 +74,11 @@ final class AppEnvironment {
         self.danmaku = DanmakuManager(provider: provider)
 
         self.player = PlayerManager()
-        self.providers = [MockMediaProvider(), LocalMediaProvider()]
+        self.providers = [
+            MockMediaProvider(),
+            LocalMediaProvider(),
+            KanjuMediaProvider(),
+        ]
     }
 
     // MARK: - 播放入口

@@ -10,6 +10,14 @@ struct SourcesView: View {
     var body: some View {
         List {
             Section {
+                providerPicker
+            } header: {
+                Text("内容源")
+            } footer: {
+                Text("切换内容源后，回到首页 / 片库即可加载对应内容。观看进度按内容源分别记录。")
+            }
+
+            Section {
                 sourceRow(
                     name: "演示媒体库",
                     type: .customAPI,
@@ -25,7 +33,7 @@ struct SourcesView: View {
                     enabled: true
                 )
             } header: {
-                Text("当前接入")
+                Text("内置能力")
             } footer: {
                 Text("以下配置项对应 P2 路线图（WebDAV / NAS / Jellyfin / Emby / Plex / 自建 API）。协议层已就绪，接入新实现时只需新增 MediaProvider 实现，无需改动播放器与页面。")
             }
@@ -67,6 +75,37 @@ struct SourcesView: View {
             if let source = editingSource {
                 SourceEditSheet(source: source) { info, secret in
                     environment.sources.save(info, secret: secret)
+                }
+            }
+        }
+    }
+
+    /// 内容源选择列表（Mock / 本机 / kanju 等）。
+    private var providerPicker: some View {
+        ForEach(environment.providers.map(\.info), id: \.id) { info in
+            Button {
+                Haptics.selection()
+                environment.setActiveProvider(info.id)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: info.kind == .remote
+                        ? "globe"
+                        : (info.kind == .local ? "internaldrive" : "sparkles.tv"))
+                        .foregroundStyle(.tint)
+                        .frame(width: 26)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(info.name)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text(info.description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if environment.activeProviderID == info.id {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.tint)
+                    }
                 }
             }
         }
