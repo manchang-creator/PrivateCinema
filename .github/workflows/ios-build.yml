@@ -70,7 +70,10 @@ jobs:
           cp ~/Library/Logs/DiagnosticReports/*.ips crashdiag/ 2>/dev/null || true
           for f in $(find crashdiag -type f \( -name "*.ips" -o -name "*.log" \) | head -8); do
             echo "===== $f"
-            tail -60 "$f" || true
+            # 异常类型在 ips 文件头部 JSON 中；堆栈太长只取首尾
+            head -40 "$f" || true
+            echo "----- tail"
+            tail -30 "$f" || true
           done
 
       - name: 上传测试诊断产物
