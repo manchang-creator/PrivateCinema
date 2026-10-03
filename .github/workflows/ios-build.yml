@@ -55,7 +55,19 @@ jobs:
             -scheme PrivateCinema \
             -destination "platform=iOS Simulator,id=$SIM_UDID" \
             -only-testing:PrivateCinemaTests \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
+            -resultBundlePath UnitTestResult.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee unit-test.log | grep -E "Test Case|Test Suite|error:|Failing|Restarting|Crash" | tail -60
+
+      # 失败时上传完整日志与结果包，用于定位崩溃堆栈
+      - name: 上传测试诊断产物
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-diagnostics
+          path: |
+            unit-test.log
+            UnitTestResult.xcresult
+          if-no-files-found: ignore
 
       - name: 运行 UI 测试生成截图
         run: |
