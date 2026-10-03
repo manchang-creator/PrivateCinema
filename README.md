@@ -118,7 +118,18 @@ struct MyServerProvider: MediaProvider {
 - 编译后在 iPhone 模拟器自动导航截图（首页 / 详情 / 播放器 / 片库 / 设置 / 深色首页），
   到 Actions 运行页面的 Artifacts 下载 `app-screenshots` 即可预览界面；
 - 工程由 XcodeGen 管理，CI 上执行 `xcodegen generate` 后构建。
-  本地如需跑 UI 测试（`PrivateCinemaUITests`），同样先执行 `xcodegen generate`。
+  本地如需跑测试（`PrivateCinemaTests` 单元测试 / `PrivateCinemaUITests` UI 测试），
+  同样先执行 `xcodegen generate`，之后在 Xcode 中 `Cmd + U` 或：
+  `xcodebuild test -project PrivateCinema.xcodeproj -scheme PrivateCinema -destination 'platform=iOS Simulator,name=iPhone 15 Pro'`
+
+### 单元测试覆盖
+
+| 测试文件 | 覆盖内容 |
+| --- | --- |
+| `SubtitleParserTests` | SRT / VTT 解析、时间戳、CRLF、空输入、排序 |
+| `DanmakuManagerTests` | 弹幕加载排序、种子门槛（仅 Mock 源）、过滤规则、高能统计归一化、高能区间 |
+| `DownloadManagerTests` | 任务状态机：入列、去重、暂停续传断点、失败、跨实例恢复、清理已完成 |
+| `HomeModuleAndSpoilerFilterTests` | 首页 section id 映射完整性、防剧透过滤 |
 
 ## 后续路线（P2）
 

@@ -55,7 +55,8 @@ PrivateCinema/
 ├── Services/            # 业务服务：PlaybackHistory / Favorite / Download / MediaSourceStore / DeviceIdentity
 ├── Persistence/         # SwiftData：PersistenceController + @Model Records + 各 Repository
 ├── Components/          # 共享 UI 组件（CachedImage / StateViews / MediaComponents）
-└── Core/                # Extensions / Networking(ImageLoader) / Utilities(AppError / KeychainStore)
+├── Core/                # Extensions / Networking(ImageLoader) / Utilities(AppError / KeychainStore)
+└── ../PrivateCinemaTests/  # 单元测试（解析器 / 弹幕管理 / 下载状态机 / 模块映射），宿主 App 内运行
 ```
 
 **模块红线（违反即打回）：**

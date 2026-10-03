@@ -46,6 +46,17 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID"
 
+      # 单元测试是硬门禁：失败直接让 CI 变红（截图步骤的容忍策略不适用于测试）
+      - name: 运行单元测试
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project PrivateCinema.xcodeproj \
+            -scheme PrivateCinema \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
+            -only-testing:PrivateCinemaTests \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
+
       - name: 运行 UI 测试生成截图
         run: |
           set -o pipefail

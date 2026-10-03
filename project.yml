@@ -41,12 +41,28 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.private.PrivateCinemaUITests
         TEST_TARGET_NAME: PrivateCinema
+  PrivateCinemaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: PrivateCinemaTests
+    dependencies:
+      - target: PrivateCinema
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.private.PrivateCinemaTests
+        # 宿主在 App 内运行，可访问 MockContent 等全部 App 符号
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/PrivateCinema.app/PrivateCinema
+        BUNDLE_LOADER: $(TEST_HOST)
 schemes:
   PrivateCinema:
     build:
       targets:
         PrivateCinema: all
         PrivateCinemaUITests: [test]
+        PrivateCinemaTests: [test]
     test:
       targets:
+        - PrivateCinemaTests
         - PrivateCinemaUITests
