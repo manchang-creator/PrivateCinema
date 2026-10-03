@@ -25,7 +25,7 @@ final class DanmakuManagerTests: XCTestCase {
     }
 
     private func makeManager(provider: MemoryProvider) -> DanmakuManager {
-        let manager = makeManager(provider: provider)
+        let manager = DanmakuManager(provider: provider)
         // DanmakuSettings 落在 UserDefaults.standard，先重置避免用例间相互污染
         manager.settings.resetToDefault()
         return manager
