@@ -13,6 +13,21 @@ enum HomeModule: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Provider 首页 section id -> 模块（id 约定集中在此，HomeView 不做字符串映射）。
+    private static let sectionIdMap: [String: HomeModule] = [
+        "recent-updates": .recentUpdates,
+        "recent-added": .recentlyAdded,
+        "hot-movies": .hotMovies,
+        "hot-series": .hotSeries,
+        "anime": .anime,
+        "variety": .variety,
+    ]
+
+    init?(sectionId: String) {
+        guard let module = Self.sectionIdMap[sectionId] else { return nil }
+        self = module
+    }
+
     var displayName: String {
         switch self {
         case .continueWatching: return "继续观看"

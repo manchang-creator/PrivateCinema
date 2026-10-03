@@ -133,7 +133,9 @@ final class PlayerViewModel {
             await danmaku.load(
                 mediaId: request.media.id,
                 episodeId: request.episode.id,
-                duration: duration
+                duration: duration,
+                // 仅演示源生成种子弹幕，真实内容源不写入假数据
+                allowSeeding: environment.mediaProvider.info.kind == .mock
             )
             applyDanmakuRendering()
 
@@ -426,8 +428,10 @@ final class PlayerViewModel {
             episodeId: request.episode.id,
             time: max(0, manager.currentTime)
         )
-        applyDanmakuRendering()
-        renderer.enqueue(item)
+        // 只追加密发的这一条；全量 reload 会清空屏幕上正在飘的弹幕
+        if danmaku.filteredItems().contains(where: { $0.id == item.id }) {
+            renderer.enqueue(item)
+        }
     }
 
     // MARK: - 字幕同步

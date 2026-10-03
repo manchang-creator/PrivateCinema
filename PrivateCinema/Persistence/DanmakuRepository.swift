@@ -39,7 +39,7 @@ struct DanmakuRepository {
             userId: item.userId,
             createdAt: item.createdAt
         ))
-        try? context.save()
+        context.saveOrLog()
     }
 
     func deleteMine(danmakuId: String) {
@@ -47,6 +47,6 @@ struct DanmakuRepository {
         for record in all where record.danmakuId == danmakuId {
             context.delete(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 }

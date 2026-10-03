@@ -49,7 +49,7 @@ final class MediaSourceStore {
         reload()
     }
 
-    /// 连接测试：对 baseURL 发起 HEAD 请求，5 秒超时。
+    /// 连接测试：对 baseURL 发起 HEAD 请求，5 秒超时；已存密钥以 Basic Auth 携带。
     func testConnection(_ source: MediaSourceInfo) async {
         statuses[source.id] = .testing
         guard let url = URL(string: source.baseURL), url.host != nil else {
@@ -59,6 +59,12 @@ final class MediaSourceStore {
         var request = URLRequest(url: url)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 5
+        // 需要鉴权的源（WebDAV / Jellyfin 等）不带凭据会误报"服务无响应"
+        let username = source.username.trimmingCharacters(in: .whitespaces)
+        if !username.isEmpty, let secret = secret(for: source.id) {
+            let credential = Data("\(username):\(secret)".utf8).base64EncodedString()
+            request.setValue("Basic \(credential)", forHTTPHeaderField: "Authorization")
+        }
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
             if let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) {

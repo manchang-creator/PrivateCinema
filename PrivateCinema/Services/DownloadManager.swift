@@ -2,16 +2,25 @@ import Foundation
 import SwiftData
 
 /// 下载引擎抽象：接入真实下载（HTTP / WebDAV）时实现该协议并注入 DownloadManager。
+/// 取消通过任务取消传递（抛 CancellationError），续传从 resumeProgress 继续。
 protocol DownloadEngine: AnyObject {
-    func download(url: URL, reportProgress: @escaping @Sendable (Double) -> Void) async throws
+    func download(
+        resumeProgress: Double,
+        reportProgress: @escaping @Sendable (Double) -> Void
+    ) async throws
 }
 
 /// 模拟下载引擎：用于 P0/P1 阶段演示任务流转与进度 UI。
 final class MockDownloadEngine: DownloadEngine {
-    func download(url: URL, reportProgress: @escaping @Sendable (Double) -> Void) async throws {
-        for step in 1...50 {
+    func download(
+        resumeProgress: Double,
+        reportProgress: @escaping @Sendable (Double) -> Void
+    ) async throws {
+        var progress = resumeProgress
+        while progress < 1 {
             try await Task.sleep(nanoseconds: 120_000_000)
-            reportProgress(Double(step) / 50.0)
+            progress = min(1, progress + 0.02)
+            reportProgress(progress)
         }
     }
 }
@@ -48,7 +57,8 @@ struct DownloadTask: Identifiable, Hashable {
 final class DownloadManager {
 
     private let repository: DownloadRepository
-    private var engine: DownloadEngine
+    /// 引擎可替换：单测注入 Stub，接入真实下载时替换实现。
+    var engine: DownloadEngine
     private(set) var tasks: [DownloadTask] = []
     private var runningTasks: [String: Task<Void, Never>] = [:]
 
@@ -138,23 +148,27 @@ final class DownloadManager {
 
     private func run(taskID: String) async {
         defer { runningTasks[taskID] = nil }
+        guard let task = tasks.first(where: { $0.id == taskID }) else { return }
         update(taskID) { $0.state = .downloading }
-        // 模拟下载：真实引擎接入后替换此段。
-        for _ in 0..<50 {
-            guard !Task.isCancelled else {
-                update(taskID) { $0.state = .paused }
-                return
-            }
-            try? await Task.sleep(nanoseconds: 120_000_000)
+        do {
+            try await engine.download(
+                resumeProgress: task.progress,
+                reportProgress: { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        self?.update(taskID) { $0.progress = min(1, progress) }
+                    }
+                }
+            )
             update(taskID) {
-                $0.progress = min(1, $0.progress + 0.02)
+                $0.progress = 1
+                $0.state = .completed
             }
+            startIfPossible()
+        } catch is CancellationError {
+            update(taskID) { $0.state = $0.progress >= 1 ? .completed : .paused }
+        } catch {
+            update(taskID) { $0.state = .failed }
         }
-        update(taskID) {
-            $0.progress = 1
-            $0.state = .completed
-        }
-        startIfPossible()
     }
 
     private func resumeWaitingTasks() {

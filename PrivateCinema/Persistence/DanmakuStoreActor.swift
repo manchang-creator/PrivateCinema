@@ -45,7 +45,7 @@ actor DanmakuStoreActor {
             userId: item.userId,
             createdAt: item.createdAt
         ))
-        try? modelContext.save()
+        modelContext.saveOrLog()
     }
 }
 

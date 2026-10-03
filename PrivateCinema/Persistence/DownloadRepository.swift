@@ -35,7 +35,7 @@ struct DownloadRepository {
                 createdAt: task.createdAt
             ))
         }
-        try? context.save()
+        context.saveOrLog()
     }
 
     func delete(taskId: String) {
@@ -47,7 +47,7 @@ struct DownloadRepository {
         for record in (try? context.fetch(descriptor)) ?? [] {
             context.delete(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 
     func clearCompleted() {
@@ -55,6 +55,6 @@ struct DownloadRepository {
         for record in all where record.stateRaw == DownloadState.completed.rawValue {
             context.delete(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 }

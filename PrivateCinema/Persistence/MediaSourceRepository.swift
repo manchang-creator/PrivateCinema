@@ -37,7 +37,7 @@ struct MediaSourceRepository {
                 createdAt: .now
             ))
         }
-        try? context.save()
+        context.saveOrLog()
     }
 
     func delete(sourceId: String) {
@@ -49,7 +49,7 @@ struct MediaSourceRepository {
         for record in (try? context.fetch(descriptor)) ?? [] {
             context.delete(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 }
 

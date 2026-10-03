@@ -99,17 +99,11 @@ struct HomeView: View {
 
     private func visibleSections(_ payload: HomeViewModel.Payload) -> [HomeSection] {
         payload.sections.compactMap { section -> HomeSection? in
-            let module: HomeModule?
-            switch section.id {
-            case "recent-updates": module = .recentUpdates
-            case "recent-added": module = .recentlyAdded
-            case "hot-movies": module = .hotMovies
-            case "hot-series": module = .hotSeries
-            case "anime": module = .anime
-            case "variety": module = .variety
-            default: module = nil
+            // 无对应模块（或模块被隐藏）的 section 不展示
+            if let module = HomeModule(sectionId: section.id),
+               hiddenModules.contains(module) {
+                return nil
             }
-            if let module, hiddenModules.contains(module) { return nil }
             guard !section.items.isEmpty else { return nil }
             return section
         }

@@ -21,7 +21,9 @@ final class DanmakuManager {
 
     // MARK: - 加载
 
-    func load(mediaId: String, episodeId: String, duration: Double) async {
+    /// 加载一集弹幕。
+    /// - Parameter allowSeeding: 空弹幕时是否生成演示种子（仅 Mock 源开启，避免污染真实数据）。
+    func load(mediaId: String, episodeId: String, duration: Double, allowSeeding: Bool = false) async {
         currentEpisodeId = episodeId
         episodeDuration = duration
         isLoading = true
@@ -29,7 +31,7 @@ final class DanmakuManager {
 
         do {
             var fetched = try await provider.fetchDanmaku(episodeId: episodeId)
-            if fetched.isEmpty && duration > 60 {
+            if allowSeeding, fetched.isEmpty, duration > 60 {
                 // 演示内容：生成确定性种子弹幕并落库
                 let seeded = seeder.seed(mediaId: mediaId, episodeId: episodeId, duration: duration)
                 for item in seeded {

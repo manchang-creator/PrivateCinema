@@ -41,7 +41,7 @@ struct WatchHistoryRepository {
             )
             context.insert(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 
     func progress(for mediaId: String, episodeId: String) -> WatchProgress? {
@@ -88,14 +88,14 @@ struct WatchHistoryRepository {
         for record in (try? context.fetch(descriptor)) ?? [] {
             context.delete(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 
     func clearAll() {
         for record in (try? context.fetch(FetchDescriptor<WatchProgressRecord>())) ?? [] {
             context.delete(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 }
 

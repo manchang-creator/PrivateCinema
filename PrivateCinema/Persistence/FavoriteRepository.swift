@@ -28,7 +28,7 @@ struct FavoriteRepository {
                 itemJSON: json
             ))
         }
-        try? context.save()
+        context.saveOrLog()
     }
 
     func removeState(mediaId: String) {
@@ -40,7 +40,7 @@ struct FavoriteRepository {
         for record in (try? context.fetch(descriptor)) ?? [] {
             context.delete(record)
         }
-        try? context.save()
+        context.saveOrLog()
     }
 
     func state(of mediaId: String) -> FavoriteState? {

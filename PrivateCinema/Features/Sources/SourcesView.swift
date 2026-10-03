@@ -249,20 +249,28 @@ struct SourceEditSheet: View {
     }
 
     private func testConnection() async {
-        // 复用 MediaSourceStore 的连通性检测（只读 HEAD 请求）
-        let store = TestConnectionProbe()
-        await store.probe(urlString: source.baseURL)
+        // 表单内尚未保存的凭据也参与测试（鉴权源不带凭据会误报）
+        let probe = TestConnectionProbe()
+        await probe.probe(
+            urlString: source.baseURL,
+            username: source.username.isEmpty ? nil : source.username,
+            secret: secret.isEmpty ? nil : secret
+        )
     }
 }
 
 /// 轻量连接探测（不落库）。
 @MainActor
 final class TestConnectionProbe {
-    func probe(urlString: String) async {
+    func probe(urlString: String, username: String?, secret: String?) async {
         guard let url = URL(string: urlString), url.host != nil else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "HEAD"
         request.timeoutInterval = 5
+        if let username, let secret {
+            let credential = Data("\(username):\(secret)".utf8).base64EncodedString()
+            request.setValue("Basic \(credential)", forHTTPHeaderField: "Authorization")
+        }
         _ = try? await URLSession.shared.data(for: request)
     }
 }

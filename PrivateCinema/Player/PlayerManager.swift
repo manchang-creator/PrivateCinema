@@ -50,7 +50,8 @@ final class PlayerManager: NSObject {
     private var statusCancellable: AnyCancellable?
     private var endCancellable: AnyCancellable?
     private var durationLoadTask: Task<Void, Never>?
-    /// 时间观测 token：init 后只读；deinit 在非隔离上下文读取，故不参与隔离检查。
+    /// 时间观测 token：注册后不移除（观测回调仅持弱引用，无保留环，
+    /// player 随本对象释放时由系统一并拆除其观测器）。
     nonisolated(unsafe) private var timeObserver: Any?
     private let volumeController = VolumeController()
 
@@ -65,11 +66,8 @@ final class PlayerManager: NSObject {
         observeTimeControlStatus()
     }
 
-    deinit {
-        if let timeObserver {
-            player.removeTimeObserver(timeObserver)
-        }
-    }
+    // 不写 deinit：deinit 在非隔离上下文不能触碰 MainActor 隔离的 player；
+    // 观测回调仅持弱引用，player 随本对象释放时由系统拆除其观测器，无泄漏。
 
     private func configureAudioSession() {
         do {
