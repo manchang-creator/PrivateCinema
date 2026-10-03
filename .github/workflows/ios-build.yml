@@ -58,15 +58,27 @@ jobs:
             -resultBundlePath UnitTestResult.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee unit-test.log | grep -E "Test Case|Test Suite|error:|Failing|Restarting|Crash" | tail -60
 
-      # 失败时上传完整日志与结果包，用于定位崩溃堆栈
+      # 失败时导出 xcresult 崩溃诊断并直接打印到 job 日志
+      - name: 导出崩溃诊断
+        if: failure()
+        run: |
+          mkdir -p crashdiag
+          xcrun xcresulttool export diagnostics \
+            --path UnitTestResult.xcresult \
+            --output-path crashdiag || true
+          # 模拟器进程崩溃报告会落在宿主 DiagnosticReports
+          cp ~/Library/Logs/DiagnosticReports/*.ips crashdiag/ 2>/dev/null || true
+          for f in $(find crashdiag -type f \( -name "*.ips" -o -name "*.log" \) | head -8); do
+            echo "===== $f"
+            tail -60 "$f" || true
+          done
+
       - name: 上传测试诊断产物
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-diagnostics
-          path: |
-            unit-test.log
-            UnitTestResult.xcresult
+          path: crashdiag
           if-no-files-found: ignore
 
       - name: 运行 UI 测试生成截图
