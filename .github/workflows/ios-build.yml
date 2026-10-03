@@ -68,13 +68,31 @@ jobs:
             --output-path crashdiag || true
           # 模拟器进程崩溃报告会落在宿主 DiagnosticReports
           cp ~/Library/Logs/DiagnosticReports/*.ips crashdiag/ 2>/dev/null || true
-          for f in $(find crashdiag -type f \( -name "*.ips" -o -name "*.log" \) | head -8); do
-            echo "===== $f"
-            # 异常类型在 ips 文件头部 JSON 中；堆栈太长只取首尾
-            head -40 "$f" || true
-            echo "----- tail"
-            tail -30 "$f" || true
-          done
+          python3 - <<'PY'
+          import json, glob
+          for path in sorted(glob.glob('crashdiag/**/PrivateCinema*.ips', recursive=True)):
+              with open(path, encoding='utf-8', errors='ignore') as f:
+                  f.readline()
+                  try:
+                      d = json.load(f)
+                  except Exception as e:
+                      print(path, 'parse error:', e); continue
+              print('=====', path)
+              print('exception:', json.dumps(d.get('exception'), ensure_ascii=False))
+              print('termination:', json.dumps(d.get('termination'), ensure_ascii=False))
+              print('asi:', json.dumps(d.get('asi'), ensure_ascii=False))
+              tid = d.get('faultingThread', 0)
+              imgs = d.get('usedImages', [])
+              t = d.get('threads', [])[tid] if tid < len(d.get('threads', [])) else None
+              if t:
+                  print('faulting thread queue:', t.get('queue'))
+                  for fr in t.get('frames', [])[:12]:
+                      i = fr.get('imageIndex')
+                      name = imgs[i].get('name', '?') if i is not None and i < len(imgs) else '?'
+                      print('   ', name, fr.get('symbol', '?'), '+' + str(fr.get('symbolLocation', '')))
+                  print('    ... total frames:', len(t.get('frames', [])))
+              print()
+          PY
 
       - name: 上传测试诊断产物
         if: failure()
