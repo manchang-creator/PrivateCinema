@@ -24,8 +24,11 @@ final class DownloadManagerTests: XCTestCase {
         }
     }
 
-    /// 容器必须在测试生命周期内保活：mainContext 依赖容器的底层存储，
-    /// 临时容器当行释放会让 context 悬空，fetch 时触发 EXC_BREAKPOINT。
+    /// 容器必须在整个测试套件生命周期内保活：引擎 Stub 留下的悬挂 run() 会在
+    /// 测试结束后再 upsert 一次，若容器已释放（setUp 重新赋值即释放旧容器），
+    /// 悬空的 mainContext 执行 fetch 会触发 EXC_BREAKPOINT。
+    /// 静态数组持有全部容器直到套件结束；内存容器，开销可忽略。
+    private static var aliveContainers: [ModelContainer] = []
     private var container: ModelContainer!
 
     override func setUp() {
@@ -34,6 +37,7 @@ final class DownloadManagerTests: XCTestCase {
             for: Schema(PersistenceController.schemaModels),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
         )
+        Self.aliveContainers.append(container)
     }
 
     override func tearDown() {
