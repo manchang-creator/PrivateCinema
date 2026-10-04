@@ -140,7 +140,7 @@ private final class DownloadEventBridge: NSObject, URLSessionDataDelegate, @unch
         if let length = http?.expectedContentLength, length > 0 {
             expectedTotal = resuming ? Int64(length) + resumeBytes : Int64(length)
         } else if let range = http?.value(forHTTPHeaderField: "Content-Range"),
-                  let remoteTotal = range.split(separator: "/").last.flatMap(Int.init) {
+                  let remoteTotal = range.split(separator: "/").last.flatMap({ Int($0) }) {
             // 总长未知时的兜底：Content-Range: bytes 5-19/20
             expectedTotal = Int64(remoteTotal)
         }
