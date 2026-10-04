@@ -138,9 +138,10 @@ final class DownloadTaskRecord {
     var mediaTitle: String
     var episodeId: String
     var episodeTitle: String
+    var sourceURL: String?
     var posterPath: String?
     var stateRaw: String
-    var progress: Double
+    var receivedBytes: Int64
     var totalBytes: Int64
     var createdAt: Date
 
@@ -150,9 +151,10 @@ final class DownloadTaskRecord {
         mediaTitle: String,
         episodeId: String,
         episodeTitle: String,
+        sourceURL: String?,
         posterPath: String?,
         stateRaw: String,
-        progress: Double,
+        receivedBytes: Int64,
         totalBytes: Int64,
         createdAt: Date
     ) {
@@ -161,9 +163,10 @@ final class DownloadTaskRecord {
         self.mediaTitle = mediaTitle
         self.episodeId = episodeId
         self.episodeTitle = episodeTitle
+        self.sourceURL = sourceURL
         self.posterPath = posterPath
         self.stateRaw = stateRaw
-        self.progress = progress
+        self.receivedBytes = receivedBytes
         self.totalBytes = totalBytes
         self.createdAt = createdAt
     }

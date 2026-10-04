@@ -97,19 +97,30 @@ final class DetailViewModel {
 
     // MARK: - 下载
 
-    func download(episode: Episode, environment: AppEnvironment) {
+    /// 解析某集的可下载直链；仅 mp4 直链可下载（HLS 需逐段合并，本地文件无需下载）。
+    /// 解析失败抛错，由调用方把任务标记为失败，不让坏任务静默躺尸。
+    private func resolveDownloadURL(episode: Episode, environment: AppEnvironment) async throws -> URL? {
+        let playInfo = try await environment.mediaProvider.playInfo(episodeId: episode.id)
+        return playInfo.urlKind == .mp4 ? playInfo.url : nil
+    }
+
+    func download(episode: Episode, environment: AppEnvironment) async {
         guard case .loaded(let detail) = state else { return }
-        environment.downloads.add(media: detail.item, episode: episode)
-        downloadStates[episode.id] = .waiting
+        do {
+            let sourceURL = try await resolveDownloadURL(episode: episode, environment: environment)
+            environment.downloads.add(media: detail.item, episode: episode, sourceURL: sourceURL)
+            downloadStates[episode.id] = .waiting
+        } catch is CancellationError {
+        } catch {
+            downloadStates[episode.id] = .failed
+        }
         Haptics.light()
     }
 
-    func downloadAll(environment: AppEnvironment) {
+    func downloadAll(environment: AppEnvironment) async {
         guard case .loaded(let detail) = state else { return }
-        environment.downloads.add(media: detail.item, episodes: detail.allEpisodes)
         for episode in detail.allEpisodes {
-            downloadStates[episode.id] = .waiting
+            await download(episode: episode, environment: environment)
         }
-        Haptics.light()
     }
 }

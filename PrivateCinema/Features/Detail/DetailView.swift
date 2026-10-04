@@ -387,7 +387,7 @@ struct DownloadPickerSheet: View {
                 if case .loaded(let detail) = viewModel.state {
                     Section {
                         Button("下载全部") {
-                            viewModel.downloadAll(environment: environment)
+                            Task { await viewModel.downloadAll(environment: environment) }
                             dismiss()
                         }
                     }
@@ -425,7 +425,7 @@ struct DownloadPickerSheet: View {
                 .foregroundStyle(.secondary)
         default:
             Button {
-                viewModel.download(episode: episode, environment: environment)
+                Task { await viewModel.download(episode: episode, environment: environment) }
             } label: {
                 Image(systemName: "arrow.down.circle")
             }

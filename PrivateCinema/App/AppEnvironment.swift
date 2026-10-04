@@ -57,7 +57,7 @@ final class AppEnvironment {
             context: context,
             keychain: KeychainStore(service: "com.private.cinema.sources")
         )
-        self.downloads = DownloadManager(context: context)
+        self.downloads = DownloadManager(context: context, engine: HTTPDownloadEngine())
 
         let danmakuStore = DanmakuStoreActor(modelContainer: container)
         let provider = LocalDanmakuProvider(

@@ -2,25 +2,31 @@ import Foundation
 import SwiftData
 
 /// 下载引擎抽象：接入真实下载（HTTP / WebDAV）时实现该协议并注入 DownloadManager。
-/// 取消通过任务取消传递（抛 CancellationError），续传从 resumeProgress 继续。
+/// 引擎吃字节、报字节：从 sourceURL 下载写入 destinationURL，从 resumeBytes 断点续传，
+/// 每次 IO 后上报（已收字节, 总字节）。取消通过任务取消传递（抛 CancellationError）。
 protocol DownloadEngine: AnyObject {
     func download(
-        resumeProgress: Double,
-        reportProgress: @escaping @Sendable (Double) -> Void
+        sourceURL: URL,
+        destinationURL: URL,
+        resumeBytes: Int64,
+        reportProgress: @escaping @Sendable (Int64, Int64) -> Void
     ) async throws
 }
 
-/// 模拟下载引擎：用于 P0/P1 阶段演示任务流转与进度 UI。
+/// 模拟下载引擎：用于演示任务流转与进度 UI（无真实网络 IO）。
 final class MockDownloadEngine: DownloadEngine {
     func download(
-        resumeProgress: Double,
-        reportProgress: @escaping @Sendable (Double) -> Void
+        sourceURL: URL,
+        destinationURL: URL,
+        resumeBytes: Int64,
+        reportProgress: @escaping @Sendable (Int64, Int64) -> Void
     ) async throws {
-        var progress = resumeProgress
-        while progress < 1 {
+        let total: Int64 = 10_000_000
+        var received = resumeBytes
+        while received < total {
             try await Task.sleep(nanoseconds: 120_000_000)
-            progress = min(1, progress + 0.02)
-            reportProgress(progress)
+            received = min(total, received + total / 50)
+            reportProgress(received, total)
         }
     }
 }
@@ -40,18 +46,25 @@ struct DownloadTask: Identifiable, Hashable {
     var mediaTitle: String
     var episodeId: String
     var episodeTitle: String
+    /// 下载源地址（HTTP 直链 / 本地文件地址）。
+    var sourceURL: URL?
     var posterURL: URL?
     var state: DownloadState
-    /// 0...1
-    var progress: Double
+    /// 已接收字节数（引擎字节语义的唯一事实源，progress 由此换算）。
+    var receivedBytes: Int64
     var totalBytes: Int64
     var createdAt: Date
+
+    /// 0...1；总字节未知时保持 0。
+    var progress: Double {
+        guard totalBytes > 0 else { return 0 }
+        return min(1, Double(receivedBytes) / Double(totalBytes))
+    }
 }
 
 /// 下载管理器。
-/// P2 现状：任务生命周期、持久化与进度 UI 完整；真实字节下载由
-/// DownloadEngine 协议承接，当前使用模拟引擎（MockDownloadEngine），
-/// 接入 WebDAV / HTTP 直链时替换实现即可，UI 无需改动。
+/// 任务生命周期、持久化与进度 UI 完整；字节下载由 DownloadEngine 协议承接
+/// （生产注入 HTTPDownloadEngine，演示用 MockDownloadEngine），UI 无需改动。
 @MainActor
 @Observable
 final class DownloadManager {
@@ -71,7 +84,8 @@ final class DownloadManager {
 
     // MARK: - Public
 
-    func add(media: MediaItem, episode: Episode) {
+    /// 入队一个下载任务。sourceURL 为空时任务无法启动（保持 waiting，仅占位）。
+    func add(media: MediaItem, episode: Episode, sourceURL: URL? = nil) {
         guard !tasks.contains(where: { $0.episodeId == episode.id }) else { return }
         let task = DownloadTask(
             id: episode.id,
@@ -79,9 +93,10 @@ final class DownloadManager {
             mediaTitle: media.title,
             episodeId: episode.id,
             episodeTitle: episode.displayTitle,
+            sourceURL: sourceURL,
             posterURL: media.posterURL,
             state: .waiting,
-            progress: 0,
+            receivedBytes: 0,
             totalBytes: 0,
             createdAt: .now
         )
@@ -90,9 +105,9 @@ final class DownloadManager {
         startIfPossible()
     }
 
-    func add(media: MediaItem, episodes: [Episode]) {
+    func add(media: MediaItem, episodes: [Episode], sourceURL: URL? = nil) {
         for episode in episodes {
-            add(media: media, episode: episode)
+            add(media: media, episode: episode, sourceURL: sourceURL)
         }
     }
 
@@ -136,7 +151,8 @@ final class DownloadManager {
     }
 
     private func startIfPossible() {
-        guard let waiting = tasks.first(where: { $0.state == .waiting }) else { return }
+        // 跳过无源地址的占位任务，避免串行队列被堵死
+        guard let waiting = tasks.first(where: { $0.state == .waiting && $0.sourceURL != nil }) else { return }
         guard runningTasks[waiting.id] == nil else { return }
         update(waiting.id) { $0.state = .downloading }
         let taskID = waiting.id
@@ -148,19 +164,28 @@ final class DownloadManager {
 
     private func run(taskID: String) async {
         defer { runningTasks[taskID] = nil }
-        guard let task = tasks.first(where: { $0.id == taskID }) else { return }
-        update(taskID) { $0.state = .downloading }
+        guard let task = tasks.first(where: { $0.id == taskID }),
+              let sourceURL = task.sourceURL else { return }
+        let destinationURL = Self.destinationURL(
+            for: taskID,
+            sourceExtension: sourceURL.pathExtension
+        )
         do {
             try await engine.download(
-                resumeProgress: task.progress,
-                reportProgress: { [weak self] progress in
+                sourceURL: sourceURL,
+                destinationURL: destinationURL,
+                resumeBytes: task.receivedBytes,
+                reportProgress: { [weak self] received, total in
                     Task { @MainActor [weak self] in
-                        self?.update(taskID) { $0.progress = min(1, progress) }
+                        self?.update(taskID) {
+                            $0.receivedBytes = max($0.receivedBytes, received)
+                            if total > 0 { $0.totalBytes = total }
+                        }
                     }
                 }
             )
             update(taskID) {
-                $0.progress = 1
+                if $0.totalBytes > 0 { $0.receivedBytes = $0.totalBytes }
                 $0.state = .completed
             }
             startIfPossible()
@@ -169,6 +194,15 @@ final class DownloadManager {
         } catch {
             update(taskID) { $0.state = .failed }
         }
+    }
+
+    /// 目标文件路径：Documents/Downloads/{episodeId}.{源扩展名}；无扩展名回退 mp4。
+    private static func destinationURL(for episodeId: String, sourceExtension: String) -> URL {
+        let ext = sourceExtension.isEmpty ? "mp4" : sourceExtension
+        let downloads = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Downloads", isDirectory: true)
+        try? FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        return downloads.appendingPathComponent("\(episodeId).\(ext)")
     }
 
     private func resumeWaitingTasks() {
@@ -186,9 +220,10 @@ extension DownloadTaskRecord {
             mediaTitle: mediaTitle,
             episodeId: episodeId,
             episodeTitle: episodeTitle,
+            sourceURL: sourceURL.flatMap(URL.init(string:)),
             posterURL: posterPath.flatMap(URL.init(string:)),
             state: DownloadState(rawValue: stateRaw) ?? .paused,
-            progress: progress,
+            receivedBytes: receivedBytes,
             totalBytes: totalBytes,
             createdAt: createdAt
         )

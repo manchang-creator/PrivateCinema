@@ -20,7 +20,9 @@ struct DownloadRepository {
         )
         if let existing = try? context.fetch(descriptor).first {
             existing.stateRaw = task.state.rawValue
-            existing.progress = task.progress
+            existing.receivedBytes = task.receivedBytes
+            existing.totalBytes = task.totalBytes
+            existing.sourceURL = task.sourceURL?.absoluteString
         } else {
             context.insert(DownloadTaskRecord(
                 taskId: task.id,
@@ -28,9 +30,10 @@ struct DownloadRepository {
                 mediaTitle: task.mediaTitle,
                 episodeId: task.episodeId,
                 episodeTitle: task.episodeTitle,
+                sourceURL: task.sourceURL?.absoluteString,
                 posterPath: task.posterURL?.absoluteString,
                 stateRaw: task.state.rawValue,
-                progress: task.progress,
+                receivedBytes: task.receivedBytes,
                 totalBytes: task.totalBytes,
                 createdAt: task.createdAt
             ))
