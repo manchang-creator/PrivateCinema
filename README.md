@@ -37,7 +37,7 @@ Apple TV + Infuse 风格的极简私人影视中心（iOS）。
 | 进度 | 每 5 秒自动保存，≥90% 判定看完；继续观看直接 seek 上次位置 |
 | 片库 | 分类 Segment + 网格/列表 + 排序（最近添加/观看/名称/年份/评分/更新）+ 观看状态筛选 |
 | 历史 | 按日期分组、单条删除、清空、点击续播 |
-| 下载 | 任务状态机 + 进度 + 暂停/继续/删除 + Wi-Fi/自动下一集/看完删除设置（当前为模拟引擎） |
+| 下载 | HTTP 直链真实引擎（流式写盘 + Range 断点续传）+ 任务状态机 + 进度 + 暂停/继续/删除 + Wi-Fi/自动下一集/看完删除设置 |
 | 媒体源 | 配置管理（名称/类型/地址/Keychain 密钥/启停/测试连接）；WebDAV/Jellyfin/Emby/Plex 为 P2 预留 |
 | MiniPlayer | Apple Music 风格常驻条，点按回到全屏播放器 |
 | 设置 | 播放/字幕/弹幕/外观（跟随系统/浅/深）/首页模块/缓存清理/关于 |
@@ -109,11 +109,12 @@ struct MyServerProvider: MediaProvider {
 | `SubtitleParserTests` | SRT / VTT 解析、时间戳、CRLF、空输入、排序 |
 | `DanmakuManagerTests` | 弹幕加载排序、种子门槛（仅 Mock 源）、过滤规则、高能统计归一化、高能区间 |
 | `DownloadManagerTests` | 任务状态机：入列、去重、暂停续传断点、失败、跨实例恢复、清理已完成 |
+| `HTTPDownloadEngineTests` | 下载引擎：完整下载字节进度、Range 断点续写、4xx 抛业务错误、续传协商失败回退全量 |
 | `HomeModuleAndSpoilerFilterTests` | 首页 section id 映射完整性、防剧透过滤 |
 
 ## 后续路线（P2）
 
 - WebDAV / Jellyfin / Emby / Plex Provider
-- 真实下载引擎（替换 `DownloadEngine` 的 Mock 实现）
+- HLS（m3u8）下载支持（逐段下载合并；当前仅 mp4 直链）
 - CloudKit 同步（SwiftData + `ModelConfiguration(cloudKitDatabase: .automatic)`）
 - 弹幕高能片段识别（基于 `DanmakuManager.highlightRanges` 扩展）
