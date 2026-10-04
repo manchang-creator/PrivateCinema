@@ -22,11 +22,21 @@ final class DownloadManagerTests: XCTestCase {
         }
     }
 
-    private func makeContainer() -> ModelContainer {
-        try! ModelContainer(
+    /// 容器必须在测试生命周期内保活：mainContext 依赖容器的底层存储，
+    /// 临时容器当行释放会让 context 悬空，fetch 时触发 EXC_BREAKPOINT。
+    private var container: ModelContainer!
+
+    override func setUp() {
+        super.setUp()
+        container = try! ModelContainer(
             for: Schema(PersistenceController.schemaModels),
             configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
         )
+    }
+
+    override func tearDown() {
+        container = nil
+        super.tearDown()
     }
 
     private func makeMedia() -> MediaItem {
@@ -39,7 +49,7 @@ final class DownloadManagerTests: XCTestCase {
 
     func testAdd_任务入列并开始下载() async {
         let manager = DownloadManager(
-            context: makeContainer().mainContext,
+            context: container.mainContext,
             engine: StubEngine { _ in
                 try await Task.sleep(nanoseconds: 10_000_000)
             }
@@ -53,7 +63,7 @@ final class DownloadManagerTests: XCTestCase {
 
     func testAdd_重复集数去重() {
         let manager = DownloadManager(
-            context: makeContainer().mainContext,
+            context: container.mainContext,
             engine: StubEngine { _ in try await Task.sleep(nanoseconds: 10_000_000) }
         )
         manager.add(media: makeMedia(), episode: makeEpisode())
@@ -65,7 +75,7 @@ final class DownloadManagerTests: XCTestCase {
     func testPauseResume_暂停保留进度_续播从断点继续() async throws {
         // 首个引擎：上报 0.5 后长睡眠，等测试侧暂停（取消 → CancellationError → paused）
         let manager = DownloadManager(
-            context: makeContainer().mainContext,
+            context: container.mainContext,
             engine: StubEngine { report in
                 report(0.5)
                 try await Task.sleep(nanoseconds: 10_000_000_000)
@@ -98,7 +108,7 @@ final class DownloadManagerTests: XCTestCase {
         let engine = StubEngine { _ in
             throw URLError(.badServerResponse)
         }
-        let manager = DownloadManager(context: makeContainer().mainContext, engine: engine)
+        let manager = DownloadManager(context: container.mainContext, engine: engine)
         manager.add(media: makeMedia(), episode: makeEpisode())
 
         for _ in 0..<50 where manager.tasks.first?.state != .failed {
@@ -108,7 +118,6 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testPersistence_任务跨实例恢复() {
-        let container = makeContainer()
         let first = DownloadManager(context: container.mainContext, engine: StubEngine { _ in
             try await Task.sleep(nanoseconds: 10_000_000)
         })
@@ -122,7 +131,7 @@ final class DownloadManagerTests: XCTestCase {
 
     func testClearCompleted_只清已完成() async throws {
         let manager = DownloadManager(
-            context: makeContainer().mainContext,
+            context: container.mainContext,
             engine: StubEngine { report in
                 report(1.0)
             }
