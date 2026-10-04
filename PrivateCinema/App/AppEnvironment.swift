@@ -77,7 +77,6 @@ final class AppEnvironment {
         self.providers = [
             MockMediaProvider(),
             LocalMediaProvider(),
-            KanjuMediaProvider(),
         ]
     }
 

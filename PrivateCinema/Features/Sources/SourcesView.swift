@@ -80,7 +80,7 @@ struct SourcesView: View {
         }
     }
 
-    /// 内容源选择列表（Mock / 本机 / kanju 等）。
+    /// 内容源选择列表（Mock / 本机等）。
     private var providerPicker: some View {
         ForEach(environment.providers.map(\.info), id: \.id) { info in
             Button {
