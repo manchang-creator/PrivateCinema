@@ -29,24 +29,15 @@ final class HTTPDownloadEngine: NSObject, DownloadEngine, @unchecked Sendable {
             request.setValue("bytes=\(resumeBytes)-", forHTTPHeaderField: "Range")
         }
 
-        let (bytesStream, continuation) = AsyncStream<(Int64, Int64)>.makeStream()
         let task = session.dataTask(with: request)
-
-        // 桥接对象持有写盘句柄与终态信号；task.delegate 强持有 bridge
+        // 桥接对象持有写盘句柄与终态信号；task.delegate 强持有 bridge。
+        // 进度在 delegate 回调线程直接上报（闭包 @Sendable，Manager 侧自行切主线程）。
         let bridge = DownloadEventBridge(
             destination: destinationURL,
             resumeBytes: resumeBytes,
-            continuation: continuation
+            reportProgress: reportProgress
         )
         task.delegate = bridge
-
-        // 字节事件泵：delegate 线程 → AsyncStream → 进度回调
-        let pump = Task {
-            for await (received, total) in bytesStream {
-                reportProgress(received, total)
-            }
-        }
-        defer { pump.cancel() }
 
         // 取消传导：外层 Task 被取消（暂停）时取消 URLSession 任务，
         // 否则挂起等待不响应取消，暂停会一直吊到服务器传完
@@ -66,13 +57,13 @@ final class HTTPDownloadEngine: NSObject, DownloadEngine, @unchecked Sendable {
 
 // MARK: - 事件桥接
 
-/// URLSession task delegate 桥：把回调式 API 转成 async 终态 + 字节流。
+/// URLSession task delegate 桥：把回调式 API 转成 async 终态。
 /// 以追加模式写目标文件；续传时从断点偏移续写。
 private final class DownloadEventBridge: NSObject, URLSessionDataDelegate, @unchecked Sendable {
 
     private let destination: URL
     private let resumeBytes: Int64
-    private let continuation: AsyncStream<(Int64, Int64)>.Continuation
+    private let reportProgress: @Sendable (Int64, Int64) -> Void
 
     private let lock = NSLock()
     private var fileHandle: FileHandle?
@@ -85,11 +76,11 @@ private final class DownloadEventBridge: NSObject, URLSessionDataDelegate, @unch
     init(
         destination: URL,
         resumeBytes: Int64,
-        continuation: AsyncStream<(Int64, Int64)>.Continuation
+        reportProgress: @escaping @Sendable (Int64, Int64) -> Void
     ) {
         self.destination = destination
         self.resumeBytes = resumeBytes
-        self.continuation = continuation
+        self.reportProgress = reportProgress
     }
 
     /// 挂起等待终态；返回终态错误（成功为 nil）。
@@ -144,7 +135,7 @@ private final class DownloadEventBridge: NSObject, URLSessionDataDelegate, @unch
             // 总长未知时的兜底：Content-Range: bytes 5-19/20
             expectedTotal = Int64(remoteTotal)
         }
-        continuation.yield((received, expectedTotal))
+        reportProgress(received, expectedTotal)
         completionHandler(.allow)
     }
 
@@ -168,7 +159,7 @@ private final class DownloadEventBridge: NSObject, URLSessionDataDelegate, @unch
             }
             try fileHandle?.write(contentsOf: data)
             received += Int64(data.count)
-            continuation.yield((received, expectedTotal))
+            reportProgress(received, expectedTotal)
         } catch {
             lock.withLock {
                 stateError = AppError.unknown("写入失败：\(error.localizedDescription)")
@@ -211,7 +202,6 @@ private final class DownloadEventBridge: NSObject, URLSessionDataDelegate, @unch
             finishedContinuation = nil
             return pending
         }
-        continuation.finish()
         pending?.resume()
     }
 }
