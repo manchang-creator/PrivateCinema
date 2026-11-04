@@ -36,8 +36,8 @@ PrivateCinema/
 ├── Tuist.swift                # Tuist 配置
 ├── apps/
 │   └── PrivateCinema/         # 交付物：入口、RootView、Info.plist、资源
-├── Modules/                   # 本地 Swift Package，每个 Feature 一包
-│   ├── CinemaKit/             # 共享内核：模型 / 持久化 / 服务 / Provider / 播放器 / 弹幕 / 字幕 / UI 组件
+├── Modules/                   # 本地 Swift Package
+│   ├── CinemaKit/             # 共享内核（单包）：模型 / 持久化 / 服务 / Provider / 播放器 / 弹幕 / 字幕 / UI 组件
 │   ├── FeatureHome/           # 首页（含 HomeModule 模块定义）
 │   ├── FeatureSearch/         # 发现 / 搜索
 │   ├── FeatureLibrary/        # 片库
@@ -52,6 +52,10 @@ PrivateCinema/
     ├── PrivateCinemaTests/    # 单元测试（@testable import CinemaKit）
     └── PrivateCinemaUITests/  # 截图 UI 测试
 ```
+
+**为什么 CinemaKit 是单包**：Player / Danmaku / Subtitles / Components 之间紧耦合（`PlayerViewModel` 同时持有
+`PlayerManager`、`DanmakuManager`、`SubtitleManager`、`PlaybackSettings`）。拆成多包会把整条链路变成 `public`，
+收益为零。**边界按「是否独立演进」划分，不按目录划分。**
 
 **模块依赖（无环）**
 
