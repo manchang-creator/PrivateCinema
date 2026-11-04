@@ -7,20 +7,63 @@ Apple TV + Infuse 风格的极简私人影视中心（iOS）。
 
 ## 环境要求
 
-- **Xcode 16+**（项目使用 Xcode 16 的同步文件组格式 `objectVersion 77`）
+- **Xcode 16+**
 - **iOS 17.0+**（SwiftUI `@Observable` / SwiftData）
+- **Tuist 4**（工程由 `Project.swift` 生成，不再提交 `.xcodeproj`）
 - iPhone / iPad 通用
 
 ## 运行
 
-1. 双击打开 `PrivateCinema.xcodeproj`
-2. 选择任意 iOS 17+ 模拟器（建议 iPhone 15 Pro）
-3. `Cmd + R` 运行
+```bash
+# 首次：安装 Tuist（https://docs.tuist.dev）
+brew install tuist
 
-> 本仓库在 Linux 环境生成，无法执行 `xcodebuild`；如首次构建报签名错误，
-> 在 Target → Signing & Capabilities 里选择你的 Team 即可（模拟器运行无需签名）。
+tuist generate        # 生成 PrivateCinema.xcworkspace
+open PrivateCinema.xcworkspace
+```
 
-如果你使用 [XcodeGen](https://github.com/yonaskolb/XcodeGen)，也可以执行 `xcodegen generate` 从 `project.yml` 重新生成工程文件。
+1. 选择任意 iOS 17+ 模拟器（建议 iPhone 15 Pro）
+2. `Cmd + R` 运行
+
+> 工程文件由 `Project.swift` 与 `Modules/*/Package.swift` 生成，**不要提交 `.xcodeproj`**。
+> 真机运行需在 Target → Signing & Capabilities 选择你的 Team（模拟器无需签名）。
+
+## 仓库结构（monorepo）
+
+```
+PrivateCinema/
+├── Project.swift              # Tuist 工程清单（App + 两个测试 target）
+├── Tuist.swift                # Tuist 配置
+├── apps/
+│   └── PrivateCinema/         # 交付物：入口、RootView、Info.plist、资源
+├── Modules/                   # 本地 Swift Package，每个 Feature 一包
+│   ├── CinemaKit/             # 共享内核：模型 / 持久化 / 服务 / Provider / 播放器 / 弹幕 / 字幕 / UI 组件
+│   ├── FeatureHome/           # 首页（含 HomeModule 模块定义）
+│   ├── FeatureSearch/         # 发现 / 搜索
+│   ├── FeatureLibrary/        # 片库
+│   ├── FeatureDetail/         # 详情
+│   ├── FeatureHistory/        # 历史
+│   ├── FeatureFavorites/      # 收藏
+│   ├── FeatureDownloads/      # 下载
+│   ├── FeatureSources/        # 媒体源
+│   ├── FeatureSettings/       # 设置
+│   └── FeatureProfile/        # 「我的」聚合页
+└── Tests/
+    ├── PrivateCinemaTests/    # 单元测试（@testable import CinemaKit）
+    └── PrivateCinemaUITests/  # 截图 UI 测试
+```
+
+**模块依赖（无环）**
+
+```
+CinemaKit  ← 所有 Feature / App
+FeatureDetail ← FeatureHome, FeatureLibrary, FeatureSearch, FeatureFavorites, FeatureProfile
+FeatureSearch ← FeatureHome
+FeatureProfile ← App（聚合 History / Favorites / Downloads / Sources / Settings）
+App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
+```
+
+新增页面 = 新建 `Modules/FeatureXxx` 包 + 在 `Project.swift` 的 `modules` 与 `appPackageProducts` 登记。
 
 ## 功能总览（P0/P1 已实现）
 
@@ -45,7 +88,7 @@ Apple TV + Infuse 风格的极简私人影视中心（iOS）。
 ## 架构
 
 ```
-SwiftUI View
+SwiftUI View（Features/<页面>）
    ↓
 ViewModel (@Observable, MainActor)
    ↓
@@ -56,6 +99,8 @@ Repository（SwiftData CRUD）
 Provider（MediaProvider 协议）   SwiftData 记录
 ```
 
+以上整条链路位于 `CinemaKit` 包内；Feature 包只依赖 CinemaKit 的公开 API。
+
 播放器：`PlayerView → PlayerViewModel → PlayerManager → AVPlayer`
 弹幕：`PlayerView → DanmakuOverlay → DanmakuRendererView(CALayer) ← DanmakuManager → DanmakuProvider`
 
@@ -65,7 +110,7 @@ Provider（MediaProvider 协议）   SwiftData 记录
 
 ## 如何接入真实媒体源
 
-实现 `MediaProvider` 协议（`Providers/MediaProvider.swift`）即可接入自有 NAS / 服务器 / 自建 API：
+实现 `MediaProvider` 协议（`Modules/CinemaKit/Sources/MediaProvider.swift`）即可接入自有 NAS / 服务器 / 自建 API：
 
 ```swift
 struct MyServerProvider: MediaProvider {
@@ -80,6 +125,7 @@ struct MyServerProvider: MediaProvider {
 ```
 
 在 `AppEnvironment.providers` 数组中注册即可；UI 与播放器零改动。
+新实现放进 `CinemaKit` 包（或独立包后由 `AppEnvironment` 依赖），Provider 协议本身已 `public`。
 敏感 Token/密码经 `MediaSourceStore` 存入 Keychain。
 
 > 注意：本项目定位为私人播放器，请只接入你有权访问的内容源（自有 NAS、
@@ -97,10 +143,10 @@ struct MyServerProvider: MediaProvider {
 - 每次 push 自动用 Xcode 编译验证；
 - 编译后在 iPhone 模拟器自动导航截图（首页 / 详情 / 播放器 / 片库 / 设置 / 深色首页），
   到 Actions 运行页面的 Artifacts 下载 `app-screenshots` 即可预览界面；
-- 工程由 XcodeGen 管理，CI 上执行 `xcodegen generate` 后构建。
+- 工程由 Tuist 管理，CI 上执行 `tuist generate --no-open` 后构建。
   本地如需跑测试（`PrivateCinemaTests` 单元测试 / `PrivateCinemaUITests` UI 测试），
-  同样先执行 `xcodegen generate`，之后在 Xcode 中 `Cmd + U` 或：
-  `xcodebuild test -project PrivateCinema.xcodeproj -scheme PrivateCinema -destination 'platform=iOS Simulator,name=iPhone 15 Pro'`
+  同样先执行 `tuist generate`，之后在 Xcode 中 `Cmd + U` 或：
+  `xcodebuild test -workspace PrivateCinema.xcworkspace -scheme PrivateCinema -destination 'platform=iOS Simulator,name=iPhone 15 Pro'`
 
 ### 单元测试覆盖
 
@@ -111,6 +157,8 @@ struct MyServerProvider: MediaProvider {
 | `DownloadManagerTests` | 任务状态机：入列、去重、暂停续传断点、失败、跨实例恢复、清理已完成 |
 | `HTTPDownloadEngineTests` | 下载引擎：完整下载字节进度、Range 断点续写、4xx 抛业务错误、续传协商失败回退全量 |
 | `HomeModuleAndSpoilerFilterTests` | 首页 section id 映射完整性、防剧透过滤 |
+
+单测以 `@testable import CinemaKit` 访问内核内部符号（`DownloadEventBridge` 等保持 internal）。
 
 ## 后续路线（P2）
 

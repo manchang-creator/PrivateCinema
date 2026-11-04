@@ -1,0 +1,79 @@
+import Foundation
+import SwiftData
+
+/// 媒体源管理：配置 CRUD + 连接测试 + 敏感信息落 Keychain。
+@MainActor
+@Observable
+public final class MediaSourceStore {
+    private let repository: MediaSourceRepository
+    private let keychain: KeychainStore
+
+    public private(set) var sources: [MediaSourceInfo] = []
+    public private(set) var statuses: [String: MediaSourceInfo.ConnectionStatus] = [:]
+
+    public init(context: ModelContext, keychain: KeychainStore) {
+        self.repository = MediaSourceRepository(context: context)
+        self.keychain = keychain
+        reload()
+    }
+
+    public func reload() {
+        sources = repository.all().map { $0.domain }
+    }
+
+    public func secretKey(for sourceId: String) -> String {
+        "source.secret.\(sourceId)"
+    }
+
+    public func secret(for sourceId: String) -> String? {
+        keychain.string(forKey: secretKey(for: sourceId))
+    }
+
+    public func save(_ info: MediaSourceInfo, secret: String?) {
+        repository.upsert(info)
+        keychain.setString(secret, forKey: secretKey(for: info.id))
+        reload()
+    }
+
+    public func delete(sourceId: String) {
+        repository.delete(sourceId: sourceId)
+        keychain.setString(nil, forKey: secretKey(for: sourceId))
+        statuses[sourceId] = nil
+        reload()
+    }
+
+    public func toggleEnabled(_ source: MediaSourceInfo) {
+        var updated = source
+        updated.enabled.toggle()
+        repository.upsert(updated)
+        reload()
+    }
+
+    /// 连接测试：对 baseURL 发起 HEAD 请求，5 秒超时；已存密钥以 Basic Auth 携带。
+    public func testConnection(_ source: MediaSourceInfo) async {
+        statuses[source.id] = .testing
+        guard let url = URL(string: source.baseURL), url.host != nil else {
+            statuses[source.id] = .failed("地址无效")
+            return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+        // 需要鉴权的源（WebDAV / Jellyfin 等）不带凭据会误报"服务无响应"
+        let username = source.username.trimmingCharacters(in: .whitespaces)
+        if !username.isEmpty, let secret = secret(for: source.id) {
+            let credential = Data("\(username):\(secret)".utf8).base64EncodedString()
+            request.setValue("Basic \(credential)", forHTTPHeaderField: "Authorization")
+        }
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) {
+                statuses[source.id] = .connected
+            } else {
+                statuses[source.id] = .failed("服务无响应")
+            }
+        } catch {
+            statuses[source.id] = .failed("无法连接")
+        }
+    }
+}

@@ -2,11 +2,15 @@ name: iOS 编译检查与截图预览
 
 # 每次 push 到 main 自动触发；也可在 Actions 页面手动触发。
 # 本仓库开发环境无 Mac：CI 负责编译验证 + 模拟器自动导航截图预览。
+# 工程由 Tuist 生成（Project.swift + Modules/ 下的本地 Swift Package）。
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+env:
+  TUIST_VERSION: "4.76.0"
 
 jobs:
   build:
@@ -23,17 +27,24 @@ jobs:
           sudo xcode-select -s "$XCODE_PATH"
           xcodebuild -version
 
-      # 工程由 XcodeGen 管理：CI 上重新生成，确保包含 UI 测试 target
-      - name: 安装 XcodeGen 并生成工程
+      # Tuist 由官方安装脚本获取，避免 brew 版本漂移
+      - name: 安装 Tuist
         run: |
-          brew install xcodegen
-          xcodegen generate
+          curl -Ls https://install.tuist.io | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          tuist version
+
+      # 本地包依赖无需额外解析；生成工程
+      - name: 生成工程
+        run: |
+          tuist install
+          tuist generate --no-open
 
       # generic 模拟器目标不依赖具体机型名称；模拟器构建无需签名
       - name: 编译（iOS 模拟器目标）
         run: |
           xcodebuild \
-            -project PrivateCinema.xcodeproj \
+            -workspace PrivateCinema.xcworkspace \
             -scheme PrivateCinema \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
@@ -51,7 +62,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -project PrivateCinema.xcodeproj \
+            -workspace PrivateCinema.xcworkspace \
             -scheme PrivateCinema \
             -destination "platform=iOS Simulator,id=$SIM_UDID" \
             -only-testing:PrivateCinemaTests \
@@ -106,9 +117,10 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild test \
-            -project PrivateCinema.xcodeproj \
+            -workspace PrivateCinema.xcworkspace \
             -scheme PrivateCinema \
             -destination "platform=iOS Simulator,id=$SIM_UDID" \
+            -only-testing:PrivateCinemaUITests \
             -resultBundlePath ScreenshotResult.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -60 \
             || echo "::warning::UI 测试未全部通过，已捕获的截图仍会上传"
@@ -168,15 +180,21 @@ jobs:
           sudo xcode-select -s "$XCODE_PATH"
           xcodebuild -version
 
-      - name: 安装 XcodeGen 并生成工程
+      - name: 安装 Tuist
         run: |
-          brew install xcodegen
-          xcodegen generate
+          curl -Ls https://install.tuist.io | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          tuist version
+
+      - name: 生成工程
+        run: |
+          tuist install
+          tuist generate --no-open
 
       - name: 编译真机 Release（未签名）
         run: |
           xcodebuild \
-            -project PrivateCinema.xcodeproj \
+            -workspace PrivateCinema.xcworkspace \
             -scheme PrivateCinema \
             -configuration Release \
             -destination 'generic/platform=iOS' \
@@ -199,4 +217,3 @@ jobs:
           name: PrivateCinema-unsigned-ipa
           path: PrivateCinema-unsigned.ipa
           if-no-files-found: error
-          

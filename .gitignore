@@ -7,3 +7,7 @@ build/
 *.dSYM.zip
 *.dSYM
 .swiftpm
+# Tuist 生成物（由 Project.swift 生成，不入库）
+*.xcodeproj/
+*.xcworkspace/
+Tuist/Dependencies/
