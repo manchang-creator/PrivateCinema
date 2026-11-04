@@ -86,17 +86,22 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build > build.log 2>&1
           status=$?
-          grep -E "error:|warning: .*deprecated" build.log | head -80 > errors.log || true
+          grep -E "error:" build.log | sort -u | head -60 > errors.log || true
           if [ $status -ne 0 ]; then
-            {
-              echo "### 编译失败"
-              echo '```'
-              cat errors.log
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            python3 - <<'PY'
+          import os
+          path = "errors.log"
+          lines = [l.strip() for l in open(path, encoding="utf-8", errors="replace") if l.strip()] if os.path.exists(path) else []
+          if not lines:
+              lines = ["(no error: lines captured; see build-log artifact)"]
+          msg = " | ".join(lines[:30])
+          for i in range(0, min(len(msg), 6000), 500):
+              print("::error title=xcodebuild::" + msg[i:i+500])
+          PY
+            tail -30 build.log
+            exit $status
           fi
-          tail -40 build.log
-          exit $status
+          tail -10 build.log
 
       - name: 上传编译日志
         if: failure()
