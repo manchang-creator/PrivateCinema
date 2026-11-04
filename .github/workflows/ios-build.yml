@@ -44,21 +44,46 @@ jobs:
           mise install
           tuist version
 
-      # 本地包依赖无需额外解析；生成工程
+      # 本地包依赖无需 tuist install（那是给 Tuist/Package.swift 的外部依赖用的）
+      # 失败时把错误写进 job summary，便于在无日志权限时定位
       - name: 生成工程
         run: |
-          tuist install
-          tuist generate --no-open
+          set +e
+          tuist generate --no-open > generate.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            {
+              echo "### tuist generate 失败"
+              echo '```'
+              tail -80 generate.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $status
 
       # generic 模拟器目标不依赖具体机型名称；模拟器构建无需签名
+      # 编译错误写进 job summary，便于在无日志权限时定位
       - name: 编译（iOS 模拟器目标）
         run: |
+          set +e
           xcodebuild \
             -workspace PrivateCinema.xcworkspace \
             -scheme PrivateCinema \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build > build.log 2>&1
+          status=$?
+          grep -E "error:|warning: .*deprecated" build.log | head -80 > errors.log || true
+          if [ $status -ne 0 ]; then
+            {
+              echo "### 编译失败"
+              echo '```'
+              cat errors.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          tail -40 build.log
+          exit $status
 
       - name: 启动 iPhone 模拟器
         run: |
@@ -203,8 +228,18 @@ jobs:
 
       - name: 生成工程
         run: |
-          tuist install
-          tuist generate --no-open
+          set +e
+          tuist generate --no-open > generate.log 2>&1
+          status=$?
+          if [ $status -ne 0 ]; then
+            {
+              echo "### tuist generate 失败"
+              echo '```'
+              tail -80 generate.log
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit $status
 
       - name: 编译真机 Release（未签名）
         run: |
