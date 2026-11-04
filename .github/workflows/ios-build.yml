@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
 
 env:
-  # 仅用于提示；实际安装走官方脚本，版本随 runner 漂移时可在此钉死
-  TUIST_VERSION: "4.76.0"
+  # 固定 Tuist 版本，保证 CI 可复现
+  TUIST_VERSION: "4.215.0"
 
 jobs:
   build:
@@ -32,11 +32,16 @@ jobs:
           sudo xcode-select -s "$XCODE_PATH"
           xcodebuild -version
 
-      # Tuist 由官方安装脚本获取，避免 brew 版本漂移
+      # mise 安装固定版本的 Tuist（官方仓库自身也用 mise 管理 CLI 版本）
       - name: 安装 Tuist
+        uses: jdx/mise-action@v3
+        with:
+          install: false
+
+      - name: 安装固定版本 Tuist
         run: |
-          curl -Ls https://install.tuist.io | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          mise use -g "tuist@$TUIST_VERSION"
+          mise install
           tuist version
 
       # 本地包依赖无需额外解析；生成工程
@@ -186,9 +191,14 @@ jobs:
           xcodebuild -version
 
       - name: 安装 Tuist
+        uses: jdx/mise-action@v3
+        with:
+          install: false
+
+      - name: 安装固定版本 Tuist
         run: |
-          curl -Ls https://install.tuist.io | bash
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          mise use -g "tuist@$TUIST_VERSION"
+          mise install
           tuist version
 
       - name: 生成工程
