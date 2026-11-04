@@ -52,14 +52,18 @@ jobs:
           tuist generate --no-open > generate.log 2>&1
           status=$?
           if [ $status -ne 0 ]; then
-            {
-              echo "### tuist generate 失败"
-              echo '```'
-              tail -80 generate.log
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            # ::error:: 写入 check run annotations（公开可读），无日志权限时也能定位
+            python3 - <<'PY'
+          import re
+          text = open("generate.log", encoding="utf-8", errors="replace").read()
+          lines = [l.rstrip() for l in text.splitlines() if l.strip()]
+          picks = [l for l in lines if re.search(r"error:|Error:|Fatal|fatal", l)] or lines[-40:]
+          msg = " | ".join(picks[:40])
+          for i in range(0, min(len(msg), 4000), 400):
+              print("::error title=tuist-generate::" + msg[i:i+400])
+          PY
+            exit $status
           fi
-          exit $status
 
       # 失败时把生成日志上传为 artifact（无日志权限时可通过公开 API 读取）
       - name: 上传生成日志
@@ -251,14 +255,18 @@ jobs:
           tuist generate --no-open > generate.log 2>&1
           status=$?
           if [ $status -ne 0 ]; then
-            {
-              echo "### tuist generate 失败"
-              echo '```'
-              tail -80 generate.log
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            # ::error:: 写入 check run annotations（公开可读），无日志权限时也能定位
+            python3 - <<'PY'
+          import re
+          text = open("generate.log", encoding="utf-8", errors="replace").read()
+          lines = [l.rstrip() for l in text.splitlines() if l.strip()]
+          picks = [l for l in lines if re.search(r"error:|Error:|Fatal|fatal", l)] or lines[-40:]
+          msg = " | ".join(picks[:40])
+          for i in range(0, min(len(msg), 4000), 400):
+              print("::error title=tuist-generate::" + msg[i:i+400])
+          PY
+            exit $status
           fi
-          exit $status
 
       - name: 编译真机 Release（未签名）
         run: |
