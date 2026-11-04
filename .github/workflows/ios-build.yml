@@ -61,6 +61,15 @@ jobs:
           fi
           exit $status
 
+      # 失败时把生成日志上传为 artifact（无日志权限时可通过公开 API 读取）
+      - name: 上传生成日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tuist-generate-log
+          path: generate.log
+          if-no-files-found: ignore
+
       # generic 模拟器目标不依赖具体机型名称；模拟器构建无需签名
       # 编译错误写进 job summary，便于在无日志权限时定位
       - name: 编译（iOS 模拟器目标）
@@ -84,6 +93,16 @@ jobs:
           fi
           tail -40 build.log
           exit $status
+
+      - name: 上传编译日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            errors.log
+          if-no-files-found: ignore
 
       - name: 启动 iPhone 模拟器
         run: |
