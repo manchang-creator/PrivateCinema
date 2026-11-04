@@ -2,6 +2,8 @@ import Foundation
 
 /// 视频规格标签（详情页与筛选使用）。
 public struct MediaSpecs: Hashable, Codable {
+    public init() {}
+
     public var is4K = false
     public var isHDR = false
     public var isDolbyVision = false

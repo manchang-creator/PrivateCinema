@@ -73,7 +73,7 @@ public struct VideoSurfaceView: UIViewRepresentable {
 
         private var panAxis: PanAxis = .undetermined
 
-        override static var layerClass: AnyClass {
+        public override static var layerClass: AnyClass {
             AVPlayerLayer.self
         }
 

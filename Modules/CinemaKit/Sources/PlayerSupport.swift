@@ -48,9 +48,9 @@ public final class PlaybackSettings {
     public enum AppearanceMode: String, CaseIterable, Identifiable {
         case system, light, dark
 
-        var id: String { rawValue }
+        public var id: String { rawValue }
 
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .system: return "跟随系统"
             case .light: return "浅色"

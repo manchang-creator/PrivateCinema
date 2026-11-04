@@ -13,7 +13,7 @@ public final class PlayerViewModel {
         case subtitleSettings
         case trackPicker
 
-        var id: Self { self }
+        public var id: Self { self }
     }
 
     // MARK: - 依赖
@@ -35,7 +35,7 @@ public final class PlayerViewModel {
     // MARK: - 轨道
 
     public struct TrackSelection: Identifiable {
-        let id: Int
+        public let id: Int
         let name: String
         let group: AVMediaSelectionGroup
         let option: AVMediaSelectionOption
