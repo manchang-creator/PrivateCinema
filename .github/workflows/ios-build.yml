@@ -7,9 +7,12 @@ name: iOS 编译检查与截图预览
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 env:
+  # 仅用于提示；实际安装走官方脚本，版本随 runner 漂移时可在此钉死
   TUIST_VERSION: "4.76.0"
 
 jobs:
