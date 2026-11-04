@@ -58,7 +58,7 @@ public final class PlaybackSettings {
             }
         }
 
-        var colorScheme: ColorScheme? {
+        public var colorScheme: ColorScheme? {
             switch self {
             case .system: return nil
             case .light: return .light
