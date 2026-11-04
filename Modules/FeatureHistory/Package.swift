@@ -7,10 +7,15 @@ let package = Package(
     products: [
         .library(name: "FeatureHistory", targets: ["FeatureHistory"]),
     ],
+    dependencies: [
+        .package(path: "../CinemaKit"),
+    ],
     targets: [
         .target(
             name: "FeatureHistory",
-            dependencies: ["CinemaKit"]
+            dependencies: [
+                .product(name: "CinemaKit", package: "CinemaKit"),
+            ]
         ),
     ]
 )

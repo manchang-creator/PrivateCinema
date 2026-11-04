@@ -7,10 +7,17 @@ let package = Package(
     products: [
         .library(name: "FeatureLibrary", targets: ["FeatureLibrary"]),
     ],
+    dependencies: [
+        .package(path: "../CinemaKit"),
+        .package(path: "../FeatureDetail"),
+    ],
     targets: [
         .target(
             name: "FeatureLibrary",
-            dependencies: ["CinemaKit", "FeatureDetail"]
+            dependencies: [
+                .product(name: "CinemaKit", package: "CinemaKit"),
+                .product(name: "FeatureDetail", package: "FeatureDetail"),
+            ]
         ),
     ]
 )

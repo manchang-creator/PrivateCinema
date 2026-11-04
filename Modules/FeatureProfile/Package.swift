@@ -7,10 +7,27 @@ let package = Package(
     products: [
         .library(name: "FeatureProfile", targets: ["FeatureProfile"]),
     ],
+    dependencies: [
+        .package(path: "../CinemaKit"),
+        .package(path: "../FeatureDetail"),
+        .package(path: "../FeatureDownloads"),
+        .package(path: "../FeatureFavorites"),
+        .package(path: "../FeatureHistory"),
+        .package(path: "../FeatureSettings"),
+        .package(path: "../FeatureSources"),
+    ],
     targets: [
         .target(
             name: "FeatureProfile",
-            dependencies: ["CinemaKit", "FeatureDetail", "FeatureDownloads", "FeatureFavorites", "FeatureHistory", "FeatureSettings", "FeatureSources"]
+            dependencies: [
+                .product(name: "CinemaKit", package: "CinemaKit"),
+                .product(name: "FeatureDetail", package: "FeatureDetail"),
+                .product(name: "FeatureDownloads", package: "FeatureDownloads"),
+                .product(name: "FeatureFavorites", package: "FeatureFavorites"),
+                .product(name: "FeatureHistory", package: "FeatureHistory"),
+                .product(name: "FeatureSettings", package: "FeatureSettings"),
+                .product(name: "FeatureSources", package: "FeatureSources"),
+            ]
         ),
     ]
 )
