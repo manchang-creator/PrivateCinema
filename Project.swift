@@ -106,8 +106,8 @@ let project = Project(
             name: "PrivateCinema",
             shared: true,
             buildAction: .buildAction(
-                targets: [
-                    .target("PrivateCinema"),
+                buildActionTargets: [
+                    .target("PrivateCinema", buildFor: [.running, .testing, .archiving, .analyzing, .profiling]),
                     .target("PrivateCinemaTests", buildFor: [.testing]),
                     .target("PrivateCinemaUITests", buildFor: [.testing]),
                 ]
