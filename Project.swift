@@ -18,7 +18,7 @@ let modules: [String] = [
     "FeatureSources",
 ]
 
-let localPackages: [Package] = modules.map { .local(path: "Modules/\($0)") }
+let localPackages: [Package.Dependency] = modules.map { .package(path: "Modules/\($0)") }
 
 // App 直接引用的包：Tab 页 + 播放器所在的内核
 let appPackageProducts: [TargetDependency] = [
