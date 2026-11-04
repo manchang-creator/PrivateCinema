@@ -38,7 +38,7 @@ PrivateCinema/
 │   └── PrivateCinema/         # 交付物：入口、RootView、Info.plist、资源
 ├── Modules/                   # 本地 Swift Package
 │   ├── CinemaKit/             # 共享内核（单包）：模型 / 持久化 / 服务 / Provider / 播放器 / 弹幕 / 字幕 / UI 组件
-│   ├── FeatureHome/           # 首页（含 HomeModule 模块定义）
+│   ├── FeatureHome/           # 首页（HomeModule 定义在 CinemaKit）
 │   ├── FeatureSearch/         # 发现 / 搜索
 │   ├── FeatureLibrary/        # 片库
 │   ├── FeatureDetail/         # 详情
