@@ -2,7 +2,21 @@ import Foundation
 
 /// 视频规格标签（详情页与筛选使用）。
 public struct MediaSpecs: Hashable, Codable {
-    public init() {}
+    public init(
+        is4K: Bool = false,
+        isHDR: Bool = false,
+        isDolbyVision: Bool = false,
+        isDolbyAtmos: Bool = false,
+        isHEVC: Bool = false,
+        fps: Double = 23.976
+    ) {
+        self.is4K = is4K
+        self.isHDR = isHDR
+        self.isDolbyVision = isDolbyVision
+        self.isDolbyAtmos = isDolbyAtmos
+        self.isHEVC = isHEVC
+        self.fps = fps
+    }
 
     public var is4K = false
     public var isHDR = false
