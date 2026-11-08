@@ -132,6 +132,50 @@ jobs:
             -resultBundlePath UnitTestResult.xcresult \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tee unit-test.log | grep -E "Test Case|Test Suite|error:|Failing|Restarting|Crash" | tail -60
 
+      # 失败用例写进 check run annotations（公开可读）：job 日志需要 admin 权限，
+      # 无 Mac 的协作环境只能靠 annotations 定位测试失败
+      - name: 汇总测试失败
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if not os.path.exists("unit-test.log"):
+              print("::error title=unit-test::(unit-test.log 未生成，测试可能启动即崩溃)")
+              raise SystemExit(0)
+          lines = [l.rstrip() for l in open("unit-test.log", encoding="utf-8", errors="replace")]
+          body = [l for l in lines if l.strip()]
+
+          def emit(title, picked):
+              # workflow command 的消息体需转义 % 与回车换行，否则注解被截断或丢弃
+              msg = " | ".join(picked).replace("%", "%25").replace("\r", "").replace("\n", " ")
+              for i in range(0, min(len(msg), 9000), 900):
+                  print(f"::error title={title}::" + msg[i:i+900])
+
+          # 失败用例 / 断言 / 崩溃关键字
+          picked = [l for l in body if re.search(
+              r"Test Case .* failed|error:|Assertion Failure|Restarting after|Crash|EXC_|Fatal error", l)]
+          if picked:
+              emit("unit-test", picked[:20])
+          # 原始日志尾部：崩溃与信号信息只出现在这里
+          emit("unit-test-tail", body[-30:])
+
+          # 完整摘要写进 step summary（公开页面可直接查看）
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as out:
+                  out.write("## 单元测试失败摘要\n\n```\n")
+                  out.write("\n".join(body[-200:]))
+                  out.write("\n```\n")
+          PY
+
+      - name: 上传测试日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-log
+          path: unit-test.log
+          if-no-files-found: ignore
+
       # 失败时导出 xcresult 崩溃诊断并直接打印到 job 日志
       - name: 导出崩溃诊断
         if: failure()
