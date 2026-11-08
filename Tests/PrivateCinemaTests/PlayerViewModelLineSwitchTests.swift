@@ -331,7 +331,7 @@ final class PlayerViewModelLineSwitchTests: XCTestCase {
         XCTAssertEqual(provider.resolveCallCount, 3)
     }
 
-    func testPlay_新剧集没有原线路_清空选中并退回第一条() async {
+    func testPlay_新剧集没有原线路_失效选择被丢弃并落到第一条() async {
         let (viewModel, provider) = await makeSUT(resolveURLs: [
             lineA.id: mediaFileURL,
             lineB.id: mediaFileURL,
@@ -339,13 +339,15 @@ final class PlayerViewModelLineSwitchTests: XCTestCase {
         await viewModel.selectLine(lineB)
         XCTAssertEqual(viewModel.selectedLineID, lineB.id)
 
-        // 第二集只提供线路 A：prepare 必须把失效的选中项清掉
+        // 第二集只提供线路 A：prepare 必须丢弃失效的线路 B 选择
         provider.linesByEpisodeID["fake-ep-02"] = [lineA]
         await viewModel.play(episode: viewModel.request.playlist[1])
 
         XCTAssertEqual(viewModel.request.episode.id, "fake-ep-02")
-        XCTAssertNil(viewModel.selectedLineID, "该集没有线路 B，选中项应被清空")
-        XCTAssertEqual(viewModel.selectedLine?.id, lineA.id, "selectedLine 回退到第一条")
+        // 失效选择被丢弃后落到第一条；装载成功后 selectedLineID 记录实际在播线路，
+        // 保证「选中项恒等于正在播放的线路」（否则再点第一条会被当成新选择重载）
+        XCTAssertEqual(viewModel.selectedLineID, lineA.id, "失效的线路 B 应被丢弃")
+        XCTAssertEqual(viewModel.selectedLine?.id, lineA.id, "selectedLine 落到第一条")
         XCTAssertNil(viewModel.loadError)
     }
 }
