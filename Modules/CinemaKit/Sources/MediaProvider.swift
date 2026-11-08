@@ -33,7 +33,12 @@ public protocol MediaProvider: Sendable {
 
     func episodes(id: String) async throws -> [Episode]
 
+    /// 某集的可用线路与字幕 / 音轨声明（不含播放地址）。
     func playInfo(episodeId: String) async throws -> PlayInfo
+
+    /// 把线路解析成可播放地址。允许异步、可失败、结果短时有效；
+    /// 切换线路时重新调用即可，播放器侧只认 `ResolvedPlayback`。
+    func resolvePlayback(line: PlayLine, episodeId: String) async throws -> ResolvedPlayback
 
     /// 相关推荐（默认无）。
     func related(id: String) async throws -> [MediaItem]

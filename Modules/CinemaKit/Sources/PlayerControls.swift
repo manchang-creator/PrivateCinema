@@ -82,7 +82,7 @@ public struct PlayerControls: View {
                 Button {
                     viewModel.activeSheet = .trackPicker
                 } label: {
-                    Label("音轨与字幕", systemImage: "waveform")
+                    Label("线路、音轨与字幕", systemImage: "waveform")
                 }
 
                 Button {
@@ -105,7 +105,7 @@ public struct PlayerControls: View {
     private var centerControls: some View {
         HStack(spacing: 44) {
             controlButton("gobackward.10") {
-                manager.skip(-10)
+                viewModel.skip(by: -10)
             }
             .disabled(viewModel.request.previousEpisode == nil && manager.currentTime < 10)
 
@@ -118,7 +118,7 @@ public struct PlayerControls: View {
             }
 
             controlButton("goforward.10") {
-                manager.skip(10)
+                viewModel.skip(by: 10)
             }
         }
     }
@@ -138,7 +138,7 @@ public struct PlayerControls: View {
                     duration: manager.duration,
                     buffered: manager.bufferedSeconds,
                     heat: viewModel.danmaku.heatBuckets(),
-                    onSeek: { manager.seek(to: $0) }
+                    onSeek: { viewModel.seek(to: $0) }
                 )
                 .frame(maxWidth: .infinity)
 
@@ -278,7 +278,7 @@ public struct BottomIconButtonStyle: ButtonStyle {
     }
 }
 
-/// 音轨 / 字幕选择 Sheet。
+/// 线路 / 音轨 / 字幕选择 Sheet。
 public struct TrackPickerSheet: View {
     @Bindable public var viewModel: PlayerViewModel
     @Environment(\.dismiss) private var dismiss
@@ -286,6 +286,38 @@ public struct TrackPickerSheet: View {
     public var body: some View {
         NavigationStack {
             List {
+                Section("线路") {
+                    ForEach(lines, id: \.id) { line in
+                        Button {
+                            Task { await viewModel.selectLine(line) }
+                            Haptics.selection()
+                        } label: {
+                            HStack {
+                                Text(line.name)
+                                Spacer()
+                                if viewModel.selectedLine?.id == line.id {
+                                    Image(systemName: "checkmark").foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                    }
+                    if lines.isEmpty {
+                        Text("当前视频没有可用线路")
+                            .foregroundStyle(.secondary)
+                    }
+                    if viewModel.isSwitchingLine {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text("正在切换线路…").foregroundStyle(.secondary)
+                        }
+                    }
+                    if let error = viewModel.lineSwitchError {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
+
                 Section("音轨") {
                     if viewModel.audioTracks.isEmpty {
                         Text("当前视频没有可选音轨")
@@ -358,7 +390,7 @@ public struct TrackPickerSheet: View {
                     }
                 }
             }
-            .navigationTitle("音轨与字幕")
+            .navigationTitle("线路、音轨与字幕")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -367,6 +399,10 @@ public struct TrackPickerSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private var lines: [PlayLine] {
+        viewModel.playInfo?.lines ?? []
     }
 
     private var externalSubtitles: [SubtitleTrackInfo] {

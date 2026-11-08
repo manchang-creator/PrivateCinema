@@ -259,9 +259,38 @@ public enum MockContent {
         if plan.useHLS && episodeIndex == 1 {
             return appleHLS
         }
+        // 用列表下标而非 hashValue：hashValue 每次启动都不同，
+        // 会让同一集指向不同视频；且 hashValue 运算可能溢出直接崩溃。
+        let planIndex = seriesPlans.firstIndex { $0.id == plan.id } ?? 0
         let pool = sampleMP4s
-        let hash = abs(plan.id.hashValue + episodeIndex)
-        return pool[hash % pool.count]
+        return pool[(planIndex + episodeIndex - 1) % pool.count]
+    }
+
+    // MARK: - 电影（单片单集）
+
+    /// 电影没有季集结构，但播放 / 进度 / 下载链路统一按 episodeId 寻址。
+    /// 为每部电影生成一条固定的"正片"条目，让它与剧集走同一条链路。
+    public static func movieEpisode(for movie: MediaItem) -> Episode {
+        Episode(
+            id: "\(movie.id)-ep-01",
+            mediaId: movie.id,
+            seasonIndex: 1,
+            index: 1,
+            title: movie.title,
+            duration: Double(movie.durationMinutes * 60),
+            stillURL: movie.stillImageURLs.first,
+            remark: nil
+        )
+    }
+
+    public static func movieSeasons(for movie: MediaItem) -> [Season] {
+        [Season(id: "\(movie.id)-s1", mediaId: movie.id, index: 1, name: "正片")]
+    }
+
+    /// 电影正片地址：按电影在列表中的固定下标映射到公开示例视频池。
+    public static func playURL(movieIndex: Int, episodeIndex: Int) -> URL {
+        let pool = sampleMP4s
+        return pool[(movieIndex + episodeIndex - 1) % pool.count]
     }
 
     // MARK: - 弹幕示例词库

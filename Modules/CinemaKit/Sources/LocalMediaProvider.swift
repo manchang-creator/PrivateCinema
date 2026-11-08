@@ -118,12 +118,18 @@ public struct LocalMediaProvider: MediaProvider {
     }
 
     public func playInfo(episodeId: String) async throws -> PlayInfo {
-        let files = scanFiles()
-        for (index, file) in files.enumerated() {
-            let episode = episode(for: file, index: index)
-            if episode.id == episodeId {
-                return PlayInfo(episodeId: episodeId, url: file.url, urlKind: .file)
-            }
+        _ = try resolveFile(episodeId: episodeId)
+        return PlayInfo(episodeId: episodeId, lines: [PlayLine(id: "local", name: "本地文件")])
+    }
+
+    public func resolvePlayback(line: PlayLine, episodeId: String) async throws -> ResolvedPlayback {
+        let file = try resolveFile(episodeId: episodeId)
+        return ResolvedPlayback(url: file.url, urlKind: .file)
+    }
+
+    private func resolveFile(episodeId: String) throws -> LocalFile {
+        for (index, file) in scanFiles().enumerated() where episode(for: file, index: index).id == episodeId {
+            return file
         }
         throw AppError.notFound
     }

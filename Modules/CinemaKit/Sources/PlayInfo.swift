@@ -22,11 +22,24 @@ public struct AudioTrackInfo: Identifiable, Hashable, Codable {
     public var languageCode: String
 }
 
-/// 播放器拉起所需的最小信息集。
+/// 播放线路描述：只说明「有哪些线路」，不含地址。
+/// 真正的播放地址由 `MediaProvider.resolvePlayback(line:episodeId:)` 按需解析，
+/// 因此解析可以是异步的、可失败的、可短时有效的（临时签名 / 二次跳转）。
+public struct PlayLine: Identifiable, Hashable {
+    public let id: String
+    public var name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+/// 单集可用的播放线路与字幕 / 音轨声明（不含具体播放地址）。
 public struct PlayInfo {
     public let episodeId: String
-    public let url: URL
-    public let urlKind: PlayURLKind
+    /// 线路列表，顺序即默认优先级
+    public var lines: [PlayLine]
     /// Provider 侧声明的外挂字幕（SRT / VTT）
     public var externalSubtitles: [SubtitleTrackInfo]
     /// Provider 侧声明的音轨（用于详情页规格展示）
@@ -34,15 +47,24 @@ public struct PlayInfo {
 
     public init(
         episodeId: String,
-        url: URL,
-        urlKind: PlayURLKind,
+        lines: [PlayLine],
         externalSubtitles: [SubtitleTrackInfo] = [],
         audioTracks: [AudioTrackInfo] = []
     ) {
         self.episodeId = episodeId
-        self.url = url
-        self.urlKind = urlKind
+        self.lines = lines
         self.externalSubtitles = externalSubtitles
         self.audioTracks = audioTracks
+    }
+}
+
+/// 某条线路解析出的、可直接交给播放器的地址。
+public struct ResolvedPlayback {
+    public let url: URL
+    public let urlKind: PlayURLKind
+
+    public init(url: URL, urlKind: PlayURLKind) {
+        self.url = url
+        self.urlKind = urlKind
     }
 }

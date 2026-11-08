@@ -76,7 +76,7 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 | 首页 | 欢迎语 + 继续观看（进度/百分比/当前集）+ 收藏 + 最近更新/添加 + 分类热门，模块可在设置中隐藏 |
 | 发现 | 防抖搜索（标题/演员/类型）+ 类型快筛 + 筛选面板（类型/年代/地区/题材/规格/评分/完结） |
 | 详情 | Backdrop 大图 + 渐变遮罩 + 播放/收藏(想看/收藏/看过)/下载 + 选集网格（✓ 已看 / ▶ 当前）+ 简介/演员/剧照/相关推荐/视频规格 |
-| 播放器 | AVPlayer + 自绘 Apple TV 风格控制层：单击显隐、±10s、长按 2x、手势快进/亮度/音量、倍速 0.5~2.0、自动下一集倒计时、上一集/下一集 |
+| 播放器 | AVPlayer + 自绘 Apple TV 风格控制层：单击显隐、±10s、长按 2x、手势快进/亮度/音量、倍速 0.5~2.0、自动下一集倒计时、上一集/下一集、多线路切换（保持进度与播放/暂停状态；新线路加载失败自动回退原线路） |
 | PiP | 系统 `AVPictureInPictureController`，退出播放页可继续小窗（后台模式已声明） |
 | AirPlay | 系统 `AVRoutePickerView` |
 | 弹幕 | `DanmakuProvider` 协议 + 本地存储 + 种子弹幕；CALayer + CADisplayLink 高性能渲染、车道防重叠、显示区域/透明度/字号/速度/分类屏蔽/关键词屏蔽、发送弹幕、高能进度条（Heatmap）、防剧透关键词过滤 |
@@ -110,7 +110,9 @@ Provider（MediaProvider 协议）   SwiftData 记录
 
 - **View 不碰数据库、不请求网络**；ViewModel 不直接写库；Player 不感知 Provider。
 - 依赖统一从 `AppEnvironment` 构造并通过 SwiftUI Environment 注入，不使用 Singleton 泛滥。
-- 弹幕渲染器为独立 `UIView`，位置由绝对时间推导：暂停冻结、seek 自动同步、切集清空。
+- 弹幕渲染器为独立 `UIView`，位置由绝对时间推导：时间源直连 `AVPlayer.currentTime()`，暂停冻结、倍速自动跟随、切集清空。
+- 所有 seek（进度条拖动、±10s、手势快进、线路切换）统一经 `PlayerViewModel.seek(to:)`，播放器与弹幕时间轴同一次调用内同步，避免回退丢弹幕 / 前进倾泻弹幕。
+- 演示源中电影同样可播放：`MediaDetail` 的选集区与播放按钮由 `allEpisodes` 驱动，电影据此生成单条「正片」季集结构，与剧集走同一条播放链路。
 
 ## 如何接入真实媒体源
 
@@ -125,8 +127,13 @@ struct MyServerProvider: MediaProvider {
     func detail(id: String) async throws -> MediaDetail { … }
     func episodes(id: String) async throws -> [Episode] { … }
     func playInfo(episodeId: String) async throws -> PlayInfo { … }
+    func resolvePlayback(line: PlayLine, episodeId: String) async throws -> ResolvedPlayback { … }
 }
 ```
+
+`playInfo` 只声明「有哪些线路、哪些外挂字幕」（`PlayLine` 是纯描述，不含地址）；
+真正的播放地址由 `resolvePlayback` 按需解析——因此解析可以是异步的、可失败的、短时有效的
+（临时签名、二次跳转、分线路限流都在这一步消化），播放器侧只认 `ResolvedPlayback(url:urlKind:)`。
 
 在 `AppEnvironment.providers` 数组中注册即可；UI 与播放器零改动。
 新实现放进 `CinemaKit` 包（或独立包后由 `AppEnvironment` 依赖），Provider 协议本身已 `public`。

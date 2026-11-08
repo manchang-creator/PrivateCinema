@@ -102,7 +102,15 @@ final class DetailViewModel {
     /// 解析失败抛错，由调用方把任务标记为失败，不让坏任务静默躺尸。
     private func resolveDownloadURL(episode: Episode, environment: AppEnvironment) async throws -> URL? {
         let playInfo = try await environment.mediaProvider.playInfo(episodeId: episode.id)
-        return playInfo.urlKind == .mp4 ? playInfo.url : nil
+        // 下载取默认线路（线路列表顺序即优先级）
+        guard let line = playInfo.lines.first else {
+            throw AppError.provider("该集没有可用播放线路")
+        }
+        let resolved = try await environment.mediaProvider.resolvePlayback(
+            line: line,
+            episodeId: episode.id
+        )
+        return resolved.urlKind == .mp4 ? resolved.url : nil
     }
 
     func download(episode: Episode, environment: AppEnvironment) async {
