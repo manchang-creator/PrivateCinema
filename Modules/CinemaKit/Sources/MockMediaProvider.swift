@@ -11,6 +11,10 @@ public struct MockMediaProvider: MediaProvider {
         description: "内置演示内容，用于体验全部功能"
     )
 
+    /// 显式公开初始化：`AppEnvironment` 的公开默认参数会引用本类型，
+    /// 合成的 `init()` 是 internal，跨包不可见。
+    public init() {}
+
     private static let allItems: [MediaItem] = MockContent.movies + MockContent.seriesPlans.map {
         MockContent.seriesItem(from: $0)
     }

@@ -13,6 +13,10 @@ public struct LocalMediaProvider: MediaProvider {
         description: "扫描本机 Documents/MediaLibrary 目录"
     )
 
+    /// 显式公开初始化：`AppEnvironment` 的公开默认参数会引用本类型，
+    /// 合成的 `init()` 是 internal，跨包不可见。
+    public init() {}
+
     public static var mediaDirectory: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = documents.appendingPathComponent("MediaLibrary", isDirectory: true)
