@@ -60,6 +60,13 @@ public final class DanmakuRendererView: UIView {
     private var displayLink: CADisplayLink?
     private var proxyStorage: DisplayLinkProxy?
 
+    /// 后退 seek 之后 AVPlayer 仍会短暂上报旧位置。
+    /// 在播放头回到新位置之前以锚点作为时间基准，否则旧位置会把两者之间的
+    /// 弹幕一次性倾倒出来。前进 seek 不需要锚点：播放头落后时自然只补新弹幕。
+    private var syncAnchor: Double?
+    /// 锚点失效时间：seek 万一没有生效，必须回到实际播放头而不是永久冻结。
+    private var syncAnchorDeadline: CFTimeInterval = 0
+
     // MARK: - 生命周期
 
     public override init(frame: CGRect) {
@@ -79,10 +86,20 @@ public final class DanmakuRendererView: UIView {
         displayLink = nil
     }
 
+    public override func didMoveToWindow() {
+        super.didMoveToWindow()
+        // 离开窗口（退出播放页）就停掉渲染循环：60fps 空转没有意义，
+        // 回来时窗口挂载会自动恢复。
+        displayLink?.isPaused = window == nil
+    }
+
     private func startDisplayLink() {
         let proxy = DisplayLinkProxy(view: self)
         let link = CADisplayLink(target: proxy, selector: #selector(DisplayLinkProxy.step))
         link.add(to: .main, forMode: .common)
+        // 创建时通常尚未挂载到窗口：先暂停，由 didMoveToWindow 恢复，
+        // 避免播放页没出现前就在后台空转 60fps
+        link.isPaused = window == nil
         displayLink = link
         proxyStorage = proxy
     }
@@ -103,17 +120,30 @@ public final class DanmakuRendererView: UIView {
     // MARK: - 对外接口
 
     /// 载入一集的弹幕（需按时间升序）。
-    public func load(items: [DanmakuItem], snapshot: Snapshot) {
+    /// 起点取当前播放时间：从 MiniPlayer 重开播放页或续播到中途时，
+    /// 不能把此前已经过去的弹幕一次性倾倒到屏幕上。
+    /// - Parameter anchor: 明确的起始播放位置。刚换完条目时 AVPlayer 的
+    ///   实时时间还停在旧值（seek 尚未生效），由调用方传入续播点更可靠。
+    public func load(items: [DanmakuItem], snapshot: Snapshot, at anchor: Double? = nil) {
         self.snapshot = snapshot
         layer.opacity = Float(snapshot.enabledOpacity)
         pending = items
-        pendingIndex = 0
+        // 换条目时播放头还停在旧条目的位置上，必须等它落到锚点再用实时时间
+        if let anchor {
+            holdTimeline(at: anchor)
+        }
+        // 没有显式锚点时沿用当前时间基准：设置变更触发的刷新不会打断
+        // 尚未生效的 seek 锚点，避免读回旧位置导致弹幕倾倒
+        let now = renderTime()
         clearActive()
-        resetLanes()
-        displayLink?.isPaused = false
+        resetLanes(at: now)
+        pendingIndex = pending.firstIndex(where: { $0.time >= now }) ?? pending.count
+        // 视图不在窗口上时保持暂停，避免后台空转（didMoveToWindow 负责恢复）
+        displayLink?.isPaused = window == nil
     }
 
     public func clear() {
+        releaseTimeline()
         pending = []
         pendingIndex = 0
         clearActive()
@@ -157,20 +187,62 @@ public final class DanmakuRendererView: UIView {
         } else {
             pendingIndex = pending.count
         }
+        holdTimeline(at: time)
+    }
+
+    // MARK: - 时间基准
+
+    /// 以锚点作为时间基准，直到播放头落到锚点附近（或超时）。
+    /// 后退 seek 之后 AVPlayer 会继续上报旧位置几百毫秒，直接用实时时间会把
+    /// 锚点与旧位置之间的弹幕整段倾泻出来。
+    private func holdTimeline(at time: Double) {
+        syncAnchor = time
+        // 网络流的 seek 可能耗时数秒：给足 3s，宁可短暂冻结也不要倾倒弹幕；
+        // 超时后由 renderTime 交还实时时间，不会永久冻结
+        syncAnchorDeadline = CACurrentMediaTime() + 3.0
+    }
+
+    private func releaseTimeline() {
+        syncAnchor = nil
+        syncAnchorDeadline = 0
+    }
+
+    /// 渲染用的时间：锚点生效期间取锚点，播放头落到锚点后交还实时时间。
+    /// 判定用绝对差值而非方向：后退 seek 时旧位置大于锚点，前进 seek 时小于，
+    /// 只有「已经落在锚点附近」才说明 seek 真正生效。
+    private func renderTime() -> Double {
+        let live = timeProvider()
+        guard let anchor = syncAnchor else { return live }
+        if abs(live - anchor) <= 0.5 {
+            releaseTimeline()
+            return live
+        }
+        guard CACurrentMediaTime() > syncAnchorDeadline else { return anchor }
+        // seek 迟迟未生效（条目未就绪 / 网络卡顿 / 被播放器忽略）：交还实时时间。
+        // 播放头已越过锚点说明是后退 seek 卡住，必须重建索引，否则恢复瞬间会把
+        // 锚点到旧位置之间的弹幕整段倾泻出来；播放头仍在锚点之前（新条目尚未
+        // seek 到位）则保留索引，等播放头自然追上锚点，同样不会堆积。
+        releaseTimeline()
+        if live > anchor {
+            clearActive()
+            resetLanes(at: live)
+            pendingIndex = pending.firstIndex { $0.time >= live } ?? pending.count
+        }
+        return live
     }
 
     public override func layoutSubviews() {
         super.layoutSubviews()
         // 尺寸变化（旋转等）后清屏重来，避免错位
         clearActive()
-        resetLanes()
+        resetLanes(at: renderTime())
     }
 
     // MARK: - 渲染
 
     private func renderFrame() {
         guard bounds.width > 1, bounds.height > 1 else { return }
-        let now = timeProvider()
+        let now = renderTime()
 
         // 到点弹幕进入渲染队列
         while pendingIndex < pending.count, pending[pendingIndex].time <= now {

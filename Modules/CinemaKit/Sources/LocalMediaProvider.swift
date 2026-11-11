@@ -13,6 +13,10 @@ public struct LocalMediaProvider: MediaProvider {
         description: "扫描本机 Documents/MediaLibrary 目录"
     )
 
+    /// 显式公开初始化：`AppEnvironment` 的公开默认参数会引用本类型，
+    /// 合成的 `init()` 是 internal，跨包不可见。
+    public init() {}
+
     public static var mediaDirectory: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = documents.appendingPathComponent("MediaLibrary", isDirectory: true)
@@ -118,12 +122,18 @@ public struct LocalMediaProvider: MediaProvider {
     }
 
     public func playInfo(episodeId: String) async throws -> PlayInfo {
-        let files = scanFiles()
-        for (index, file) in files.enumerated() {
-            let episode = episode(for: file, index: index)
-            if episode.id == episodeId {
-                return PlayInfo(episodeId: episodeId, url: file.url, urlKind: .file)
-            }
+        _ = try resolveFile(episodeId: episodeId)
+        return PlayInfo(episodeId: episodeId, lines: [PlayLine(id: "local", name: "本地文件")])
+    }
+
+    public func resolvePlayback(line: PlayLine, episodeId: String) async throws -> ResolvedPlayback {
+        let file = try resolveFile(episodeId: episodeId)
+        return ResolvedPlayback(url: file.url, urlKind: .file)
+    }
+
+    private func resolveFile(episodeId: String) throws -> LocalFile {
+        for (index, file) in scanFiles().enumerated() where episode(for: file, index: index).id == episodeId {
+            return file
         }
         throw AppError.notFound
     }

@@ -65,7 +65,8 @@ public struct PlayerView: View {
                         viewModel.panChanged(translation: translation, side: side)
                     },
                     onPanEnded: { viewModel.panEnded() },
-                    onAttach: { manager.attach(playerLayer: $0) }
+                    onAttach: { manager.attach(playerLayer: $0) },
+                    onDetach: { manager.detachPlayerLayer() }
                 )
 
                 DanmakuOverlay(renderer: viewModel.renderer)

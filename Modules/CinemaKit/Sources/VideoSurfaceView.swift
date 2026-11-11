@@ -23,6 +23,8 @@ public struct VideoSurfaceView: UIViewRepresentable {
     public var onPanEnded: () -> Void = {}
     /// AVPlayerLayer 挂载回调（PiP 控制器需要持有它）
     public var onAttach: (AVPlayerLayer) -> Void = { _ in }
+    /// AVPlayerLayer 卸载回调（释放 PiP 控制器，避免持有已消失的图层）
+    public var onDetach: () -> Void = {}
 
     public func makeUIView(context: Context) -> PlayerContainerView {
         let view = PlayerContainerView(frame: .zero)
@@ -32,6 +34,7 @@ public struct VideoSurfaceView: UIViewRepresentable {
         view.onPanBegan = onPanBegan
         view.onPanChanged = onPanChanged
         view.onPanEnded = onPanEnded
+        view.onDetach = onDetach
         onAttach(view.playerLayer)
         return view
     }
@@ -43,6 +46,7 @@ public struct VideoSurfaceView: UIViewRepresentable {
         uiView.onPanBegan = onPanBegan
         uiView.onPanChanged = onPanChanged
         uiView.onPanEnded = onPanEnded
+        uiView.onDetach = onDetach
     }
 
     public static func dismantleUIView(_ uiView: PlayerContainerView, coordinator: ()) {

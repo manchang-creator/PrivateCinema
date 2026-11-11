@@ -44,7 +44,14 @@ public final class AppEnvironment {
 
     // MARK: - Init
 
-    public init(container: ModelContainer) {
+    /// - Parameter providers: 媒体源列表。默认装配演示源与本地源；
+    ///   测试可注入替身以覆盖多线路 / 解析失败等场景。至少需要一项
+    ///   （`mediaProvider` 在找不到当前源时回退到 `providers[0]`）。
+    public init(
+        container: ModelContainer,
+        providers: [MediaProvider] = [MockMediaProvider(), LocalMediaProvider()]
+    ) {
+        precondition(!providers.isEmpty, "至少需要一个媒体源")
         self.container = container
         let context = container.mainContext
 
@@ -74,10 +81,7 @@ public final class AppEnvironment {
         self.danmaku = DanmakuManager(provider: provider)
 
         self.player = PlayerManager()
-        self.providers = [
-            MockMediaProvider(),
-            LocalMediaProvider(),
-        ]
+        self.providers = providers
     }
 
     // MARK: - 播放入口

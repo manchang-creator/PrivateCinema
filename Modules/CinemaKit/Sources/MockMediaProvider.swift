@@ -11,6 +11,10 @@ public struct MockMediaProvider: MediaProvider {
         description: "内置演示内容，用于体验全部功能"
     )
 
+    /// 显式公开初始化：`AppEnvironment` 的公开默认参数会引用本类型，
+    /// 合成的 `init()` 是 internal，跨包不可见。
+    public init() {}
+
     private static let allItems: [MediaItem] = MockContent.movies + MockContent.seriesPlans.map {
         MockContent.seriesItem(from: $0)
     }
@@ -79,35 +83,34 @@ public struct MockMediaProvider: MediaProvider {
                 related: relatedFor(item)
             )
         }
-        guard let movie = Self.allItems.first(where: { $0.id == id }) else {
+        guard let movie = Self.movie(for: id) else {
             throw AppError.notFound
         }
-        return MediaDetail(item: movie, seasons: [], episodesBySeason: [:], related: relatedFor(movie))
+        // 电影同样需要季集结构：详情页的选集区与"播放"按钮都由 allEpisodes 驱动，
+        // 返回空数组会让电影既无法播放也无法显示进度。
+        return MediaDetail(
+            item: movie,
+            seasons: MockContent.movieSeasons(for: movie),
+            episodesBySeason: [1: [MockContent.movieEpisode(for: movie)]],
+            related: relatedFor(movie)
+        )
     }
 
     public func episodes(id: String) async throws -> [Episode] {
-        guard let plan = Self.plan(for: id) else {
+        if let plan = Self.plan(for: id) {
+            return MockContent.episodes(for: plan)
+        }
+        guard let movie = Self.movie(for: id) else {
             throw AppError.notFound
         }
-        return MockContent.episodes(for: plan)
+        return [MockContent.movieEpisode(for: movie)]
     }
 
     public func playInfo(episodeId: String) async throws -> PlayInfo {
-        // episodeId 形如 "mock-series-01-ep-07"
-        guard let separatorRange = episodeId.range(of: "-ep-") else {
-            throw AppError.notFound
-        }
-        let mediaId = String(episodeId[..<separatorRange.lowerBound])
-        let indexText = String(episodeId[separatorRange.upperBound...])
-        guard let plan = Self.plan(for: mediaId),
-              let index = Int(indexText), index >= 1 else {
-            throw AppError.notFound
-        }
+        let playable = try Self.parseEpisodeId(episodeId)
 
-        let url = MockContent.playURL(plan: plan, episodeIndex: index)
-        let isHLS = url.pathExtension == "m3u8"
         var externals: [SubtitleTrackInfo] = []
-        if index == 1 {
+        if playable.episodeIndex == 1 {
             externals = [
                 SubtitleTrackInfo(
                     id: "external-demo-srt",
@@ -120,14 +123,63 @@ public struct MockMediaProvider: MediaProvider {
         }
         return PlayInfo(
             episodeId: episodeId,
-            url: url,
-            urlKind: isHLS ? .hls : .mp4,
+            lines: [PlayLine(id: "default", name: "默认线路")],
             externalSubtitles: externals,
             audioTracks: [AudioTrackInfo(id: "default", name: "默认音轨", languageCode: "und")]
         )
     }
 
+    public func resolvePlayback(line: PlayLine, episodeId: String) async throws -> ResolvedPlayback {
+        switch try Self.parseEpisodeId(episodeId) {
+        case .series(let plan, let index):
+            let url = MockContent.playURL(plan: plan, episodeIndex: index)
+            return ResolvedPlayback(url: url, urlKind: url.pathExtension == "m3u8" ? .hls : .mp4)
+        case .movie(let movieIndex, let episodeIndex):
+            let url = MockContent.playURL(movieIndex: movieIndex, episodeIndex: episodeIndex)
+            return ResolvedPlayback(url: url, urlKind: .mp4)
+        }
+    }
+
     // MARK: - Private
+
+    /// 可播放单元：剧集按「剧 + 集号」寻址，电影按「电影下标 + 正片序号」寻址。
+    private enum MockPlayable {
+        case series(MockContent.MockSeriesPlan, index: Int)
+        case movie(index: Int, episodeIndex: Int)
+
+        var episodeIndex: Int {
+            switch self {
+            case .series(_, let index): index
+            case .movie(_, let episodeIndex): episodeIndex
+            }
+        }
+    }
+
+    private static func movie(for mediaId: String) -> MediaItem? {
+        MockContent.movies.first { $0.id == mediaId }
+    }
+
+    /// 解析 episodeId（剧集形如 "mock-series-01-ep-07"，电影形如 "mock-movie-01-ep-01"）。
+    private static func parseEpisodeId(_ episodeId: String) throws -> MockPlayable {
+        guard let separatorRange = episodeId.range(of: "-ep-") else {
+            throw AppError.notFound
+        }
+        let mediaId = String(episodeId[..<separatorRange.lowerBound])
+        let indexText = String(episodeId[separatorRange.upperBound...])
+        guard let index = Int(indexText), index >= 1 else {
+            throw AppError.notFound
+        }
+        if let plan = Self.plan(for: mediaId) {
+            guard index <= plan.episodeCount else { throw AppError.notFound }
+            return .series(plan, index: index)
+        }
+        if let movieIndex = MockContent.movies.firstIndex(where: { $0.id == mediaId }) {
+            // 电影只有一条正片
+            guard index == 1 else { throw AppError.notFound }
+            return .movie(index: movieIndex, episodeIndex: index)
+        }
+        throw AppError.notFound
+    }
 
     private func applyFilters(_ filters: SearchFilters, to items: [MediaItem]) -> [MediaItem] {
         var result = items

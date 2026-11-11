@@ -41,13 +41,21 @@ public final class PlayerManager: NSObject {
 
     /// 单集播完回调（由 ViewModel 注入自动连播逻辑）。
     public var onPlaybackEnded: (() -> Void)?
+    /// 当前条目加载失败回调（由 ViewModel 注入线路回退逻辑）。
+    public var onItemFailed: ((Error?) -> Void)?
+    /// 当前条目就绪回调（由 ViewModel 用于确认线路切换成功）。
+    public var onItemReady: (() -> Void)?
 
     // MARK: - 私有
 
     private var playerLayer: AVPlayerLayer?
     private var pipController: AVPictureInPictureController?
     private var pipCancellable: AnyCancellable?
+    /// 视图已卸载但画中画仍在播：延后到 PiP 停止再释放控制器
+    private var pendingPipRelease = false
     private var statusCancellable: AnyCancellable?
+    /// 当前条目的加载状态（.failed 时上报，供线路回退使用）
+    private var itemStatusCancellable: AnyCancellable?
     private var endCancellable: AnyCancellable?
     private var durationLoadTask: Task<Void, Never>?
     /// 时间观测 token：注册后不移除（观测回调仅持弱引用，无保留环，
@@ -82,6 +90,7 @@ public final class PlayerManager: NSObject {
 
     public func load(url: URL, startPosition: Double?, autoplay: Bool) {
         endCancellable = nil
+        itemStatusCancellable = nil
         durationLoadTask?.cancel()
 
         let item = AVPlayerItem(url: url)
@@ -101,17 +110,45 @@ public final class PlayerManager: NSObject {
                 }
             }
 
+        // 条目加载状态必须上报：线路切换时旧内容已被替换，
+        // 只有上层知道该退回哪条线路、什么时候可以确认切换成功。
+        // 身份校验放在 MainActor 内做：旧条目的迟到回调不得影响当前播放。
+        itemStatusCancellable = item.publisher(for: \.status)
+            .sink { [weak self, weak item] status in
+                guard status == .readyToPlay || status == .failed else { return }
+                Task { @MainActor [weak self, weak item] in
+                    guard let self, let item, self.player.currentItem === item else { return }
+                    switch status {
+                    case .readyToPlay:
+                        self.onItemReady?()
+                    case .failed:
+                        self.handleItemFailed(item.error)
+                    default:
+                        break
+                    }
+                }
+            }
+
         durationLoadTask = Task { @MainActor [weak self] in
             if let time = try? await item.asset.load(.duration) {
                 self?.duration = time.seconds.isFinite ? time.seconds : 0
             }
         }
 
+        // 起点必须精确生效：调用方（ViewModel）用同一个值对齐弹幕与字幕时间轴，
+        // 若这里对小幅起点悄悄改成从 0 播，画外音轨与画面会错位几秒。
+        // seek 在条目未就绪时由 AVPlayer 排队，就绪后自动执行。
+        if let startPosition, startPosition > 0 {
+            seek(to: startPosition)
+        }
         if autoplay {
             play()
-        }
-        if let startPosition, startPosition > 3 {
-            seek(to: startPosition)
+        } else {
+            // 不自动播放时 timeControlStatus 停在 .paused，
+            // 而 observeTimeControlStatus 只从 .playing 回落 .paused，
+            // 不显式收口会让 state 永远卡在 .preparing（首次点播放变成暂停）。
+            state = .paused
+            isBuffering = false
         }
     }
 
@@ -125,6 +162,8 @@ public final class PlayerManager: NSObject {
         duration = 0
         bufferedSeconds = 0
         onPlaybackEnded = nil
+        onItemFailed = nil
+        onItemReady = nil
     }
 
     // MARK: - 基础控制
@@ -231,6 +270,14 @@ public final class PlayerManager: NSObject {
         onPlaybackEnded?()
     }
 
+    private func handleItemFailed(_ error: Error?) {
+        // 旧条目的迟到回调（已被替换）不得影响当前播放
+        guard player.currentItem?.status == .failed else { return }
+        state = .paused
+        isBuffering = false
+        onItemFailed?(error)
+    }
+
     // MARK: - 画中画 (PiP)
 
     /// 由视频承载视图在挂载图层时调用。
@@ -253,9 +300,21 @@ public final class PlayerManager: NSObject {
 
     public func detachPlayerLayer() {
         playerLayer = nil
+        isPictureInPicturePossible = false
+        // 画中画仍在播时不能立刻销毁控制器，否则小窗会直接断掉；
+        // 等系统回调 didStop 之后再补做释放。
+        if isPictureInPictureActive {
+            pendingPipRelease = true
+            return
+        }
+        releasePipController()
+    }
+
+    private func releasePipController() {
+        pipController?.delegate = nil
         pipController = nil
         pipCancellable = nil
-        isPictureInPicturePossible = false
+        pendingPipRelease = false
     }
 
     public func togglePictureInPicture() {
@@ -279,7 +338,12 @@ extension PlayerManager: AVPictureInPictureControllerDelegate {
 
     public nonisolated func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         Task { @MainActor [weak self] in
-            self?.isPictureInPictureActive = false
+            guard let self else { return }
+            self.isPictureInPictureActive = false
+            // 视图卸载时挂起的释放，等小窗真正关闭后再执行
+            if self.pendingPipRelease {
+                self.releasePipController()
+            }
         }
     }
 }

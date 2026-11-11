@@ -7,7 +7,18 @@
 
 ---
 
-## 0. 最高指令（全仓 · 不可违反）
+## 0. 当前阶段（2026-11-08 起 · 优先级最高）
+
+**iOS 客户端已暂停废弃，不再测试、不再验收。** 当前工作重心是 **Windows 客户端**。
+
+- **禁止**为 iOS 端启动或等待 CI（`.github/workflows/ios-build.yml` 的单元测试、UI 截图），禁止做 iOS 编译验收与单测修复。
+- **禁止**主动推送 `refactor/player-acceptance` 分支；已推内容保持原状，不回滚、不清理。
+- 除非用户明确要求恢复 iOS 工作，否则一切 iOS 相关任务（改页面、改播放器、跑测试）一律不做，先确认阶段。
+- 新建的 Windows 客户端工程与本文档的 iOS 规则分离：Windows 端另立工程目录与自己的 `AGENTS.md`，不得套用 Swift / Tuist / Xcode 约定。
+
+---
+
+## 1. 最高指令（全仓 · 不可违反）
 
 1. **向用户提问必须使用交互提问工具**（当前环境的工具名以实际注入为准，常见为 `AskUserQuestion`）。
    - **适用：** 任务目标未指明、存在多种实现方案需抉择、关键设计取舍、破坏性操作或需明确授权。
@@ -15,7 +26,7 @@
    - 若当前会话未注入任何提问工具，则以纯文本列出选项并**停等用户回复**，同样不得擅自选定。
 2. **严禁伪造构建与验收结论。**
    - 本仓库可能由 Agent 在无 Xcode 环境（如 Linux）下修改，此时**无法执行 `xcodebuild` / 模拟器**；只能做静态检查（完整阅读改动文件、核对类型与引用）。
-   - 改动后**如实说明「未编译验证」**；严禁声称「已运行通过 / 已在模拟器验证 / 推测没问题」。具备 Mac + Xcode 16 环境时才可执行 §5 的构建验证。
+   - 改动后**如实说明「未编译验证」**；严禁声称「已运行通过 / 已在模拟器验证 / 推测没问题」。具备 Mac + Xcode 16 环境时才可执行 §6 的构建验证。
 3. **禁止兜底式修复（对就对，错就错）。**
    - 数据或行为出错必须修根因，不得用「空值回退」「旧字段兼容」「`try?` 吞错」「双写并存」掩盖问题；存量脏数据一次修到位，禁止在展示层临时兜底。
    - 已知例外：`PersistenceController` 的容器创建降级（持久层失败退化为内存模式）是有意设计，保持现状。
@@ -23,7 +34,7 @@
 
 ---
 
-## 1. 工具链与环境（纯本地应用 · 无外部服务）
+## 2. 工具链与环境（纯本地应用 · 无外部服务）
 
 本项目为**纯本地 iOS 应用**：无云服务器、无数据库凭据、无部署流程。数据全部存于设备本地（SwiftData + Keychain + UserDefaults）。
 
@@ -41,7 +52,7 @@
 
 ---
 
-## 2. 项目架构与边界地图
+## 3. 项目架构与边界地图
 
 ```text
 PrivateCinema/
@@ -95,7 +106,7 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 
 ---
 
-## 3. 编码原则（外科手术式改动）
+## 4. 编码原则（外科手术式改动）
 
 1. **最小代码原则**：能用最少代码解决绝不堆砌；不为一次性场景引入抽象或「灵活性 / 可配置性」；没有必然发生的错误不堆冗余 catch。
 2. **只动必须动的**：不重构未损坏的代码；不顺手改相邻代码的格式与注释；不擅自删除存量代码（本次引入的孤儿代码除外）。
@@ -106,7 +117,7 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 
 ---
 
-## 4. 常用命令
+## 5. 常用命令
 
 | 场景 | 命令 | 说明 |
 |---|---|---|
@@ -121,10 +132,13 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 > Info.plist 位于 `apps/PrivateCinema/Info.plist`；改 target 设置则动 `Project.swift`。
 
 **CI：** `.github/workflows/ios-build.yml` 在 macOS runner 上自动执行 `tuist generate` + 构建 + 单元测试 + 模拟器截图（Artifacts 可下载）。无本地 Mac 时，可推分支让 CI 验证构建与单测——这是**合法**的验证路径，结果以 CI 状态为准。
+**当前阶段例外：** iOS 端已暂停（见 §0），上述 CI 验证路径暂停使用；恢复 iOS 工作后再启用。
 
 ---
 
-## 5. 变更后验证
+## 6. 变更后验证
+
+> **当前阶段（见 §0）：iOS 端暂停，本节仅作恢复 iOS 工作后的规程留存，现阶段不执行。**
 
 1. **无 Xcode 环境（Linux 等）**：做静态自查——完整阅读改动文件、核对类型/引用/协程隔离（`@MainActor` / `Sendable`）、确认无孤儿引用；**如实告知「未编译验证」**。
 2. **无本地 Mac 但有 CI**：推分支触发 `ios-build.yml`，以 CI 绿/红作为构建与单测的验证依据；UI 截图从 Artifacts 下载复核。
@@ -135,7 +149,7 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 
 ---
 
-## 6. Git 协作安全规范（仅当用户明确指示 Git 操作时）
+## 7. Git 协作安全规范（仅当用户明确指示 Git 操作时）
 
 1. **严禁广度暂存**：禁止 `git add -A` / `git add .`；始终且只 `git add <明确文件路径>`；提交前 `git status` 确认暂存范围。
 2. **禁止破坏性命令**：`git reset --hard`、`git checkout .`、`git clean -fd`、`git stash`、`commit --no-verify`、force push。
@@ -154,7 +168,7 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 
 ---
 
-## 7. 任务路由速查
+## 8. 任务路由速查
 
 | 任务 | 去哪 |
 |---|---|
@@ -167,12 +181,12 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 | 下载任务 | `Modules/CinemaKit/Sources/DownloadManager.swift`（引擎走 `DownloadEngine` 协议，默认注入 `HTTPDownloadEngine`，HLS/m3u8 下载属 P2） |
 | 改依赖装配 / 全局入口 | `Modules/CinemaKit/Sources/AppEnvironment.swift`（唯一入口） |
 | 改工程配置 / Info.plist / 图标 | `Project.swift` + `apps/PrivateCinema/Info.plist` → `tuist generate` |
-| 新增 Feature 包 | 见 §4 命令表 |
+| 新增 Feature 包 | 见 §5 命令表 |
 | 文档 | `README.md`（随功能同步更新） |
 
 ---
 
-## 8. 联网检索与外部信息核实
+## 9. 联网检索与外部信息核实
 
 凡涉及 Apple API 行为、SwiftUI / SwiftData / AVFoundation 版本差异、第三方库用法时，必须联网核实，不得凭旧记忆推断：
 
@@ -182,7 +196,7 @@ App → CinemaKit, FeatureHome, FeatureSearch, FeatureLibrary, FeatureProfile
 
 ---
 
-## 9. 回答风格
+## 10. 回答风格
 
 - 简短、技术、直接；少废话与填充文案。
 - 提交、issue、代码中不使用 emoji。
