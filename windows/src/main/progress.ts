@@ -5,7 +5,7 @@
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import type { WatchProgress } from '@shared/types'
+import type { WatchProgress } from '@private-cinema/core/shared'
 
 interface ProgressFile {
   version: 1

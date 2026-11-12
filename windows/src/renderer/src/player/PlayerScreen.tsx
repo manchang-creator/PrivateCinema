@@ -3,15 +3,23 @@
 // 时间轴只有一个真相源：`<video>` 元素。字幕与弹幕都读它，不各自计时。
 
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
-import type { DisplayBrightness } from '@shared/ipc'
-import type { Episode, MediaItem } from '@shared/types'
-import { isCompleted } from '@shared/types'
-import { toMediaUrl } from '@shared/media-url'
+import {
+  isCompleted,
+  toMediaUrl,
+  type DisplayBrightness,
+  type Episode,
+  type MediaItem,
+} from '@private-cinema/core/shared'
 import { DanmakuCanvas } from '../danmaku/DanmakuCanvas'
-import { filterItems, loadSettings, saveSettings, type DanmakuSettings } from '../danmaku/settings'
-import { seedDanmaku } from '../danmaku/seeder'
-import { cueAt, parseSubtitle, type SubtitleCue } from '../subtitle/parser'
-import { formatTime } from '../ui/format'
+import {
+  filterItems,
+  loadSettings,
+  saveSettings,
+  seedDanmaku,
+  type DanmakuSettings,
+} from '@private-cinema/core/danmaku'
+import { cueAt, parseSubtitle, type SubtitleCue } from '@private-cinema/core/subtitle'
+import { formatTime } from '@private-cinema/core/ui'
 
 interface Props {
   media: MediaItem

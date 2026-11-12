@@ -4,8 +4,8 @@
 // 只能调用这里列出的方法 —— 能力边界即安全边界。
 
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, type CinemaApi, type ProgressQuery, type SubtitleFile } from '@shared/ipc'
-import type { WatchProgress } from '@shared/types'
+import { IPC, type CinemaApi, type ProgressQuery, type SubtitleFile } from '@private-cinema/core/shared'
+import type { WatchProgress } from '@private-cinema/core/shared'
 
 const api: CinemaApi = {
   pickVideos: () => ipcRenderer.invoke(IPC.pickVideos),

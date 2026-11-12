@@ -3,7 +3,11 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,
@@ -18,9 +22,26 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/renderer/src/*"],
-      "@shared/*": ["src/shared/*"]
+      "@/*": [
+        "src/renderer/src/*"
+      ],
+      "@private-cinema/core/shared": [
+        "../packages/core/src/shared/index.ts"
+      ],
+      "@private-cinema/core/danmaku": [
+        "../packages/core/src/danmaku/index.ts"
+      ],
+      "@private-cinema/core/subtitle": [
+        "../packages/core/src/subtitle/parser.ts"
+      ],
+      "@private-cinema/core/ui": [
+        "../packages/core/src/ui/index.ts"
+      ]
     }
   },
-  "include": ["src/renderer/src/**/*.ts", "src/renderer/src/**/*.tsx", "src/shared/**/*.ts"]
+  "include": [
+    "src/renderer/src/**/*.ts",
+    "src/renderer/src/**/*.tsx",
+    "src/shared/**/*.ts"
+  ]
 }

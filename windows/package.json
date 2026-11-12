@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@private-cinema/core": "file:../packages/core",
     "koffi": "^3.3.7",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

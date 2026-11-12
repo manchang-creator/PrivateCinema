@@ -11,7 +11,7 @@
 // 3. HMONITOR / hPhysicalMonitor 是 BigInt —— 不可当 number 用，不可 JSON.stringify。
 
 import koffi from 'koffi'
-import type { BrightnessWriteResult, DisplayBrightness } from '@shared/ipc'
+import type { BrightnessWriteResult, DisplayBrightness } from '@private-cinema/core/shared'
 
 // ==================== 纯逻辑（可单测） ====================
 

@@ -6,7 +6,7 @@
 import { createReadStream } from 'node:fs'
 import { realpath, stat } from 'node:fs/promises'
 import { Readable } from 'node:stream'
-import { ALLOWED_MEDIA_EXTENSIONS, fromMediaUrl } from '@shared/media-url'
+import { ALLOWED_MEDIA_EXTENSIONS, fromMediaUrl } from '@private-cinema/core/shared'
 
 /** 扩展名 → MIME。Chromium 会嗅探，但显式声明更稳。 */
 const CONTENT_TYPES: Record<string, string> = {

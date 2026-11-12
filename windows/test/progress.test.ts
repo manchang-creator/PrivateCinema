@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ProgressStore } from '../src/main/progress'
-import { isCompleted, progressPercent, type WatchProgress } from '../src/shared/types'
+import { isCompleted, progressPercent, type WatchProgress } from '@private-cinema/core/shared'
 
 // ==================== 播放进度判定 ====================
 // 与 iOS `WatchProgress.isCompleted` 同一阈值：90%。

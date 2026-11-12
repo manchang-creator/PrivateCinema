@@ -3,7 +3,7 @@
 // 播放页因此不需要再回查任何全局状态。
 
 import { useCallback, useState, type JSX } from 'react'
-import type { Episode, MediaItem } from '@shared/types'
+import type { Episode, MediaItem } from '@private-cinema/core/shared'
 import { LibraryScreen } from './ui/LibraryScreen'
 import { PlayerScreen } from './player/PlayerScreen'
 

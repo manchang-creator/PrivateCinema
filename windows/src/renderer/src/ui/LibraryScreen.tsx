@@ -2,8 +2,8 @@
 // 两个入口：选文件 / 选文件夹。扫描在主进程完成，这里只负责展示与选择。
 
 import { useCallback, useEffect, useState, type JSX } from 'react'
-import type { Episode, MediaItem, WatchProgress } from '@shared/types'
-import { formatSize, formatTime } from './format'
+import type { Episode, MediaItem, WatchProgress } from '@private-cinema/core/shared'
+import { formatSize, formatTime } from '@private-cinema/core/ui'
 
 interface Props {
   items: MediaItem[]

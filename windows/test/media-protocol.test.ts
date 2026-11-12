@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { handleMediaRequest, parseRangeHeader } from '../src/main/media-protocol'
 import { MediaAccessRegistry } from '../src/main/media-access'
-import { toMediaUrl } from '../src/shared/media-url'
+import { toMediaUrl } from '@private-cinema/core/shared'
 
 // ==================== Range 解析 ====================
 // 这是拖动进度条与续播的命门：解析错 = seek 静默失效（seekable 恒为 [0,0]）。

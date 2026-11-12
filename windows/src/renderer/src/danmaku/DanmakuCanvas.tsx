@@ -4,9 +4,14 @@
 // 逐个改 transform 会产生大量样式重算。
 
 import { useEffect, useRef, type JSX, type RefObject } from 'react'
-import type { DanmakuItem } from '@shared/types'
-import { DanmakuEngine, type DanmakuViewport } from './engine'
-import { filterItems, toSnapshot, type DanmakuSettings } from './settings'
+import type { DanmakuItem } from '@private-cinema/core/shared'
+import {
+  DanmakuEngine,
+  filterItems,
+  toSnapshot,
+  type DanmakuSettings,
+  type DanmakuViewport,
+} from '@private-cinema/core/danmaku'
 
 interface Props {
   items: DanmakuItem[]

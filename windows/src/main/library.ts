@@ -9,8 +9,8 @@
 
 import { readdir, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import type { Episode, MediaItem, MediaKind } from '@shared/types'
-import type { LibraryScan } from '@shared/ipc'
+import type { Episode, MediaItem, MediaKind } from '@private-cinema/core/shared'
+import type { LibraryScan } from '@private-cinema/core/shared'
 
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.m4v', '.mov', '.mkv', '.webm'])
 

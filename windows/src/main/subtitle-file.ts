@@ -4,7 +4,7 @@
 
 import { readdir, readFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
-import type { SubtitleFile } from '@shared/ipc'
+import type { SubtitleFile } from '@private-cinema/core/shared'
 
 const SUBTITLE_EXTENSIONS = ['.srt', '.vtt']
 
