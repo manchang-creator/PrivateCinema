@@ -181,7 +181,8 @@ Linux 特有注意：路径可能含空格、中文；一律走 `path` 模块与
 | 打 AppImage + deb | `npm run dist` | 产物在 `release/` |
 | 只打解包目录 | `npm run dist:dir` | 产物在 `release/linux-unpacked/` |
 | 运行打包产物 | `./release/linux-unpacked/private-cinema` | |
-| 真机自检 | `bash scripts/linux-smoke.sh` | 背光 / ddcutil / 产物 / xvfb 启动冒烟，逐项 PASS/FAIL |
+| 真机自检 | `bash scripts/linux-smoke.sh` | 背光 / ddcutil / 产物 / xvfb 启动冒烟 / 主进程 `--self-check`，逐项 PASS/FAIL |
+| 主进程自检（无需人眼） | `./release/linux-unpacked/private-cinema --self-check` | 枚举显示器 + 读值写回往返，JSON 输出到 stdout |
 
 `out/`、`node_modules/`、`release/` 不入库。
 
@@ -195,8 +196,10 @@ Linux 特有注意：路径可能含空格、中文；一律走 `path` 模块与
 3. **构建层**：`npm run build` PASS，`out/` 三件齐全。
 4. **打包层**：`npm run dist:dir` PASS，`release/linux-unpacked/private-cinema` 可执行、
    `resources/udev/` 随包、`locales/` 只留 `en-US` `zh-CN`。
-5. **运行层**：`bash scripts/linux-smoke.sh` 无 FAIL；或真实显示器下启动应用，
-   确认窗口渲染出真实 UI（非空白 / 非纯黑）。
+5. **运行层**：`bash scripts/linux-smoke.sh` 无意外 FAIL；或真实显示器下启动应用，
+   确认窗口渲染出真实 UI（非空白 / 非纯黑）；`--self-check` 能正常退出并输出显示器列表。
+   > 已知环境坑：**不要**用 `electron out/main/index.js` 直接跑 —— 本机 X11 下它会挂住
+   > （与自检代码无关，空脚本同样挂）。自检一律跑 electron-builder 产出的二进制。
 6. **端到端层（唯一能宣称「播放可用 / 亮度可调」的层级）**：用真实视频文件走一遍
    `选文件 → 播放 → 字幕 → 弹幕上屏 → 退出重进续播`；在真实显示器上拖动亮度滑块看屏幕变化。
    未做这一层，只能报告「编译 / 单测 / 构建 / 打包通过，播放与亮度未做端到端验证」。
@@ -204,7 +207,8 @@ Linux 特有注意：路径可能含空格、中文；一律走 `path` 模块与
 **禁止的表述：**「推测没问题」「应该能播」「单测通过所以播放正常」。
 **易碎区**（手势、时间轴、canvas 渲染、Range 请求、ddcutil 节流）必须真机验证。
 
-**CI 现状：** 尚未新增 `linux-build.yml`（与 `windows-build.yml` 同构，待确认 runner 后再补）。
+**CI 现状：** `.github/workflows/linux-build.yml` 已就位（typecheck → test → build →
+`dist:dir` → 产物/asar/udev 校验），与 `windows-build.yml` 同构；未覆盖 AppImage/deb 产出。
 本地无 GUI 会话时用 `xvfb-run -a` 顶替，只能覆盖到「运行层」。
 
 ---
@@ -245,6 +249,7 @@ Linux 特有注意：路径可能含空格、中文；一律走 `path` 模块与
 
 | 任务 | 去哪 |
 |---|---|
+| 改视频加载错误文案 | `src/renderer/src/player/PlayerScreen.tsx`（`onError` 带 `MediaError` 码） |
 | 改播放器行为（播放 / 暂停 / seek / 全屏 / 换集） | `src/renderer/src/player/PlayerScreen.tsx` |
 | 改亮度触发 / 节流 | `src/renderer/src/player/PlayerScreen.tsx`（`flushBrightness`） |
 | 改亮度后端（sysfs / ddcutil / 错误文案） | `src/main/brightness.ts` + `test/brightness.test.ts` |

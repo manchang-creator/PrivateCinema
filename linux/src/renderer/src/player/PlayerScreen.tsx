@@ -175,7 +175,18 @@ export function PlayerScreen({
       if (hasNext) onSelectEpisode(playlist[currentIndex + 1])
     }
     const onError = (): void => {
-      setError(`无法播放：${episode.title}`)
+      // 把 <video> 的真实错误码带出来。桌面端最常见的失败是容器/编码不被 Chromium 支持
+      // （MEDIA_ERR_SRC_NOT_SUPPORTED = 4，例如 MKV 的某些音轨），只显示片名无法定位。
+      const code = video?.error?.code ?? 0
+      const detail =
+        code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+          ? '（该容器或编码不被支持）'
+          : code === MediaError.MEDIA_ERR_DECODE
+            ? '（解码失败）'
+            : code === MediaError.MEDIA_ERR_NETWORK
+              ? '（读取中断）'
+              : ''
+      setError(`无法播放：${episode.title}${detail}${code > 0 ? ` [错误码 ${code}]` : ''}`)
       setPlaying(false)
     }
 

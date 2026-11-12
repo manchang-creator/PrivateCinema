@@ -1,9 +1,35 @@
 # 私人影院 · PrivateCinema
 
-Apple TV + Infuse 风格的极简私人影视中心（iOS）。
+Apple TV + Infuse 风格的极简私人影视中心（iOS / Windows / Linux）。
 
 仅供个人使用：无广告、无 VIP、无运营位。所有内容通过统一 `MediaProvider` 协议接入，
 内置演示媒体库（公开测试视频流 + 占位海报）保证开箱即可运行，不包含任何抓取或解析逻辑。
+
+## 桌面客户端（Windows / Linux）
+
+iOS 客户端已暂停验收，当前迭代重心在桌面端。两者共用跨平台内核
+`packages/core`（`@private-cinema/core`：领域模型、IPC 契约、弹幕引擎、字幕解析），
+各自的壳与约定见 `windows/AGENTS.md`、`linux/AGENTS.md`。
+
+| 端 | 目录 | 系统专属能力 |
+|---|---|---|
+| Windows | `windows/` | Windows 系统亮度（WMI / DDC） |
+| Linux | `linux/` | sysfs 背光 + ddcutil（DDC/CI）外接屏亮度，AppImage / deb 打包 |
+
+Linux 端常用命令（在 `linux/` 下）：
+
+```bash
+npm install            # 依赖（packages/core 以 file: 本地包引入）
+npm run dev            # 开发热更新
+npm run typecheck      # tsc 全量检查
+npm test               # vitest 纯逻辑单测
+npm run build          # 产物在 out/
+npm run dist:dir       # 解包打包，产物 release/linux-unpacked/
+bash scripts/linux-smoke.sh   # 真机自检：背光 / ddcutil / 产物 / 启动 / --self-check
+```
+
+> 亮度需要用户侧授权：内置屏装 `linux/build/udev/90-private-cinema-backlight.rules`（背光节点归 `video` 组），
+> 外接屏装 `ddcutil` 并把用户加入 `i2c` 组。应用本身不提权，检测不到权限会返回带原因的提示。
 
 ## 环境要求
 
