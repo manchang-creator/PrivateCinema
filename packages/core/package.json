@@ -1,0 +1,24 @@
+{
+  "name": "@private-cinema/core",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "PrivateCinema 跨平台内核：领域模型、IPC 契约、弹幕引擎、字幕解析（Windows / Linux 共用）",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./shared": "./src/shared/index.ts",
+    "./danmaku": "./src/danmaku/index.ts",
+    "./subtitle": "./src/subtitle/parser.ts",
+    "./ui": "./src/ui/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.12"
+  }
+}

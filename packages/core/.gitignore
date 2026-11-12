@@ -1,0 +1,4 @@
+# 跨平台内核的依赖与缓存
+node_modules/
+.vite/
+*.tsbuildinfo
