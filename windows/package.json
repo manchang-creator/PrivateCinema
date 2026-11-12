@@ -7,6 +7,7 @@
   "author": "manchang-creator",
   "main": "out/main/index.js",
   "scripts": {
+    "postinstall": "node ../scripts/patch-openhongguo.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
@@ -20,6 +21,7 @@
     "@private-cinema/core": "file:../packages/core",
     "hls.js": "^1.7.4",
     "koffi": "^3.3.7",
+    "openhongguo": "^0.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -55,7 +57,8 @@
     ],
     "asarUnpack": [
       "node_modules/koffi/**/*",
-      "node_modules/@koromix/**/*"
+      "node_modules/@koromix/**/*",
+      "node_modules/openhongguo/**/*"
     ],
     "win": {
       "target": [

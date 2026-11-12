@@ -1,18 +1,20 @@
-// ==================== 在线片库（看剧AI）====================
-// 数据全部经主进程签名代理，这里只负责展示与交互：
-// 分类/搜索 → 卡片网格 → 详情弹层（选集）→ 交给 App 进入播放。
+// ==================== 在线片库（多片源）====================
+// 数据全部经主进程代理（看剧AI 另需签名），这里只负责展示与交互：
+// 片源切换 / 分类/搜索 → 卡片网格 → 详情弹层（选集）→ 交给 App 进入播放。
 // 播放地址不在这里解析：进入播放页后由 PlayerScreen 按集 token 现解析。
 
-import { useCallback, useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import type {
-  Episode,
-  MediaItem,
-  MediaKind,
-  RemoteCard,
-  RemoteDetail,
-  RemoteEpisode,
-  RemoteHomeData,
+import {
+  REMOTE_PROVIDERS,
+  type Episode,
+  type MediaItem,
+  type MediaKind,
+  type RemoteCard,
+  type RemoteDetail,
+  type RemoteEpisode,
+  type RemoteHomeData,
+  type RemoteProviderId,
 } from '@private-cinema/core/shared'
+import { useCallback, useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
 interface Props {
   onPlay: (media: MediaItem, episode: Episode, startPosition: number, playlist?: Episode[]) => void
@@ -25,6 +27,15 @@ const KIND_TABS: ReadonlyArray<{ key: MediaKind | null; label: string }> = [
   { key: 'anime', label: '动漫' },
   { key: 'variety', label: '综艺' },
 ]
+
+/** 每个片源自己的分类页签：红果只有推荐流（短剧），看剧AI 有电影/剧集等。 */
+const PROVIDER_KINDS: Record<
+  RemoteProviderId,
+  ReadonlyArray<{ key: MediaKind | null; label: string }>
+> = {
+  kanju: KIND_TABS,
+  hongguo: [{ key: null, label: '推荐' }],
+}
 
 function messageOf(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
@@ -150,6 +161,7 @@ function RemoteRail({
 }
 
 export function OnlineLibrary({ onPlay }: Props): JSX.Element {
+  const [provider, setProvider] = useState<RemoteProviderId>('kanju')
   const [home, setHome] = useState<RemoteHomeData | null>(null)
   const [mode, setMode] = useState<'home' | 'results'>('home')
   const [results, setResults] = useState<RemoteCard[]>([])
@@ -167,16 +179,18 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
 
-  const loadHome = useCallback(async () => {
+  const loadHome = useCallback(async (prov: RemoteProviderId) => {
     setLoading(true)
     setError(null)
     try {
-      const data = await window.cinema.remoteHome()
+      const data = await window.cinema.remoteHome(prov)
       setHome(data)
       setMode('home')
       setKind(null)
       setKeyword('')
+      setResults([])
     } catch (cause) {
+      setHome(null)
       setError(messageOf(cause, '在线首页加载失败'))
     } finally {
       setLoading(false)
@@ -184,8 +198,8 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
   }, [])
 
   useEffect(() => {
-    void loadHome()
-  }, [loadHome])
+    void loadHome(provider)
+  }, [provider, loadHome])
 
   const loadPage = useCallback(
     async (target: { kind: MediaKind | null; keyword: string }, nextPage: number) => {
@@ -194,8 +208,8 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
       try {
         const data =
           target.keyword.trim() !== ''
-            ? await window.cinema.remoteSearch(target.keyword.trim(), nextPage)
-            : await window.cinema.remoteBrowse(target.kind, nextPage)
+            ? await window.cinema.remoteSearch(provider, target.keyword.trim(), nextPage)
+            : await window.cinema.remoteBrowse(provider, target.kind, nextPage)
         setResults((previous) => (nextPage === 1 ? data.cards : [...previous, ...data.cards]))
         setPage(data.page)
         setHasMore(data.hasMore)
@@ -206,7 +220,7 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
         setLoading(false)
       }
     },
-    [],
+    [provider],
   )
 
   const chooseKind = useCallback(
@@ -216,13 +230,14 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
       if (nextKind === null) {
         setMode('home')
         setError(null)
+        setResults([])
         return
       }
-      const label = KIND_TABS.find((tab) => tab.key === nextKind)?.label ?? '分类'
+      const label = PROVIDER_KINDS[provider].find((tab) => tab.key === nextKind)?.label ?? '分类'
       setHeading(label)
       void loadPage({ kind: nextKind, keyword: '' }, 1)
     },
-    [loadPage],
+    [loadPage, provider],
   )
 
   const submitSearch = useCallback(() => {
@@ -239,26 +254,39 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
     void loadPage({ kind, keyword }, page + 1)
   }, [kind, keyword, loadPage, page])
 
-  const openCard = useCallback(async (card: RemoteCard) => {
-    setActive(card)
-    setDetail(null)
-    setEpisodes([])
-    setDetailError(null)
-    setDetailLoading(true)
-    try {
-      const [detailResult, episodeResult] = await Promise.all([
-        window.cinema.remoteDetail(card.id).catch(() => null),
-        window.cinema.remoteEpisodes(card.id),
-      ])
-      setDetail(detailResult)
-      setEpisodes(episodeResult)
-      if (episodeResult.length === 0) setDetailError('该作品暂无可用选集')
-    } catch (cause) {
-      setDetailError(messageOf(cause, '详情加载失败'))
-    } finally {
-      setDetailLoading(false)
-    }
+  const switchProvider = useCallback((next: RemoteProviderId) => {
+    setProvider((current) => (current === next ? current : next))
+    setMode('home')
+    setKind(null)
+    setKeyword('')
+    setResults([])
+    setError(null)
+    // provider 变化会触发上方 useEffect 重新加载该片源首页
   }, [])
+
+  const openCard = useCallback(
+    async (card: RemoteCard) => {
+      setActive(card)
+      setDetail(null)
+      setEpisodes([])
+      setDetailError(null)
+      setDetailLoading(true)
+      try {
+        const [detailResult, episodeResult] = await Promise.all([
+          window.cinema.remoteDetail(provider, card.id).catch(() => null),
+          window.cinema.remoteEpisodes(provider, card.id),
+        ])
+        setDetail(detailResult)
+        setEpisodes(episodeResult)
+        if (episodeResult.length === 0) setDetailError('该作品暂无可用选集')
+      } catch (cause) {
+        setDetailError(messageOf(cause, '详情加载失败'))
+      } finally {
+        setDetailLoading(false)
+      }
+    },
+    [provider],
+  )
 
   const playEpisode = useCallback(
     (episode: RemoteEpisode) => {
@@ -273,7 +301,7 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
         genres: detail?.genres ?? card.genres,
         durationMinutes: 0,
         overview: detail?.overview ?? '',
-        source: 'kanju',
+        source: provider,
         posterUrl: detail?.posterUrl ?? card.posterUrl,
         remarks: detail?.remarks ?? card.remarks,
         episodeCount: detail?.episodeCount ?? episodes.length,
@@ -286,23 +314,29 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
         title: item.title,
         duration: 0,
         filePath: '',
-        source: 'kanju',
+        source: provider,
         episodeToken: item.token,
       }))
       const target = playlist.find((item) => item.id === episode.id)
       if (target === undefined) return
       onPlay(media, target, 0, playlist)
     },
-    [active, detail, episodes, onPlay],
+    [active, detail, episodes, onPlay, provider],
   )
 
   const renderCard = (card: RemoteCard): JSX.Element => (
     <button key={card.id} className="remote-card" onClick={() => void openCard(card)}>
       <div className="remote-poster">
-        {card.posterUrl !== '' ? (
-          <img src={card.posterUrl} alt={card.title} loading="lazy" />
-        ) : (
-          <span className="remote-poster-fallback">{card.title.slice(0, 1)}</span>
+        <span className="remote-poster-fallback">{card.title.slice(0, 1)}</span>
+        {card.posterUrl !== '' && (
+          <img
+            src={card.posterUrl}
+            alt={card.title}
+            loading="lazy"
+            onError={(event) => {
+              event.currentTarget.style.display = 'none'
+            }}
+          />
         )}
         <span className="remote-poster-scrim" aria-hidden="true" />
         <span className="remote-poster-play" aria-hidden="true">
@@ -322,9 +356,24 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
 
   return (
     <div className="online-library">
+      <div className="online-providers" role="tablist" aria-label="在线片源">
+        {REMOTE_PROVIDERS.map((item) => (
+          <button
+            key={item.id}
+            role="tab"
+            aria-selected={provider === item.id}
+            className={provider === item.id ? 'online-provider active' : 'online-provider'}
+            title={item.description}
+            onClick={() => switchProvider(item.id)}
+          >
+            {item.name}
+          </button>
+        ))}
+      </div>
+
       <div className="online-toolbar">
         <div className="online-kinds" role="tablist" aria-label="分类">
-          {KIND_TABS.map((tab) => (
+          {PROVIDER_KINDS[provider].map((tab) => (
             <button
               key={tab.label}
               role="tab"
@@ -345,13 +394,18 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
         >
           <input
             value={keyword}
-            placeholder="搜索电影 / 电视剧 / 动漫 / 综艺"
+            placeholder={provider === 'hongguo' ? '搜索短剧 / 漫剧' : '搜索电影 / 电视剧 / 动漫 / 综艺'}
             onChange={(event) => setKeyword(event.target.value)}
           />
           <button type="submit" className="btn-primary" disabled={loading}>
             搜索
           </button>
-          <button type="button" className="btn-ghost" disabled={loading} onClick={() => void loadHome()}>
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={loading}
+            onClick={() => void loadHome(provider)}
+          >
             刷新
           </button>
         </form>
@@ -412,10 +466,15 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
 
             <div className="remote-modal-body">
               <div className="remote-modal-poster">
-                {(detail?.posterUrl ?? active.posterUrl) !== '' ? (
-                  <img src={detail?.posterUrl ?? active.posterUrl} alt={active.title} />
-                ) : (
-                  <span className="remote-poster-fallback">{active.title.slice(0, 1)}</span>
+                <span className="remote-poster-fallback">{active.title.slice(0, 1)}</span>
+                {(detail?.posterUrl ?? active.posterUrl) !== '' && (
+                  <img
+                    src={detail?.posterUrl ?? active.posterUrl}
+                    alt={active.title}
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none'
+                    }}
+                  />
                 )}
               </div>
               <div className="remote-modal-info">

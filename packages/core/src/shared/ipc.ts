@@ -16,9 +16,26 @@ export interface ProgressQuery {
   episodeId: string
 }
 
-// ==================== 在线片源（看剧AI / kanju）====================
+// ==================== 在线片源（多源）====================
 // 主进程代渲染进程请求远端并签名；渲染进程只拿到已归一化的领域数据。
 // 播放地址按集 token 现解析，所得 URL 短时有效，过期后由播放器重新解析。
+// 具体片源由 `provider` 参数区分：`kanju`（看剧AI）/ `hongguo`（红果短剧）。
+
+/** 在线片源标识。与本地 `local` 一起构成 `MediaSourceId`。 */
+export type RemoteProviderId = 'kanju' | 'hongguo'
+
+/** 在线片源的展示元信息（渲染进程据此渲染片源切换按钮）。 */
+export interface RemoteProviderInfo {
+  id: RemoteProviderId
+  name: string
+  description: string
+}
+
+/** 已接入的在线片源清单，唯一事实源。 */
+export const REMOTE_PROVIDERS: ReadonlyArray<RemoteProviderInfo> = [
+  { id: 'kanju', name: '看剧AI', description: 'kanju1.com 聚合片源（电影 / 剧集 / 动漫 / 综艺）' },
+  { id: 'hongguo', name: '红果短剧', description: '红果短剧非官方接口（真人短剧 / 漫剧）' },
+]
 
 /** 远端片库卡片。字段已归一化为领域模型所需的最小集。 */
 export interface RemoteCard {
@@ -147,19 +164,31 @@ export interface CinemaApi {
   /** 设置某台显示器的亮度，值会被收敛到该显示器支持的范围。 */
   setBrightness(id: string, value: number): Promise<BrightnessWriteResult>
 
-  // ---------- 在线片源（看剧AI / kanju）----------
+  // ---------- 在线片源（多源）----------
   /** 拉取在线首页聚合（多个分区）。 */
-  remoteHome(): Promise<RemoteHomeData>
+  remoteHome(provider: RemoteProviderId): Promise<RemoteHomeData>
   /** 在线分类浏览；kind 为 null 表示不限类型。 */
-  remoteBrowse(kind: MediaKind | null, page: number): Promise<RemoteBrowsePage>
+  remoteBrowse(
+    provider: RemoteProviderId,
+    kind: MediaKind | null,
+    page: number,
+  ): Promise<RemoteBrowsePage>
   /** 在线搜索。 */
-  remoteSearch(keyword: string, page: number): Promise<RemoteBrowsePage>
+  remoteSearch(
+    provider: RemoteProviderId,
+    keyword: string,
+    page: number,
+  ): Promise<RemoteBrowsePage>
   /** 在线作品详情。 */
-  remoteDetail(mediaId: string): Promise<RemoteDetail>
+  remoteDetail(provider: RemoteProviderId, mediaId: string): Promise<RemoteDetail>
   /** 在线作品选集列表。 */
-  remoteEpisodes(mediaId: string): Promise<RemoteEpisode[]>
+  remoteEpisodes(provider: RemoteProviderId, mediaId: string): Promise<RemoteEpisode[]>
   /** 按集 token 解析出可直接播放的地址；lineId 指定线路时优先使用该线路。 */
-  remoteResolve(episodeToken: string, lineId?: string): Promise<RemotePlayback>
+  remoteResolve(
+    provider: RemoteProviderId,
+    episodeToken: string,
+    lineId?: string,
+  ): Promise<RemotePlayback>
 }
 
 /** 字幕文件内容：文件名仅用于界面展示。 */

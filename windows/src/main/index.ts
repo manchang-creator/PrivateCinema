@@ -5,9 +5,10 @@ import {
   type BrightnessWriteResult,
   type MediaKind,
   type ProgressQuery,
+  type RemoteProviderId,
   type SubtitleFile,
 } from '@private-cinema/core/shared'
-import { MEDIA_SCHEME } from '@private-cinema/core/shared'
+import { MEDIA_SCHEME, toMediaUrl } from '@private-cinema/core/shared'
 import type { WatchProgress } from '@private-cinema/core/shared'
 import { buildLibrary, collectVideoFiles } from './library'
 import {
@@ -18,6 +19,15 @@ import {
   kanjuResolve,
   kanjuSearch,
 } from './kanju'
+import {
+  configureHongguo,
+  hongguoBrowse,
+  hongguoDetail,
+  hongguoEpisodes,
+  hongguoHome,
+  hongguoResolve,
+  hongguoSearch,
+} from './hongguo'
 import { MediaAccessRegistry } from './media-access'
 import { handleMediaRequest } from './media-protocol'
 import { ProgressStore } from './progress'
@@ -165,24 +175,46 @@ function registerIpc(): void {
   })
 
   // 在线片源：所有远端请求（含签名）都在主进程完成，密钥不出主进程。
-  ipcMain.handle(IPC.remoteHome, async () => kanjuHome())
-
-  ipcMain.handle(IPC.remoteBrowse, async (_event, kind: MediaKind | null, page: number) =>
-    kanjuBrowse(kind ?? null, Number(page) || 1),
+  // provider 决定路由到哪个片源适配器：kanju（看剧AI）/ hongguo（红果短剧）。
+  ipcMain.handle(IPC.remoteHome, async (_event, provider: RemoteProviderId) =>
+    provider === 'hongguo' ? hongguoHome() : kanjuHome(),
   )
 
-  ipcMain.handle(IPC.remoteSearch, async (_event, keyword: string, page: number) =>
-    kanjuSearch(String(keyword ?? ''), Number(page) || 1),
+  ipcMain.handle(
+    IPC.remoteBrowse,
+    async (_event, provider: RemoteProviderId, kind: MediaKind | null, page: number) =>
+      provider === 'hongguo'
+        ? hongguoBrowse(kind ?? null, Number(page) || 1)
+        : kanjuBrowse(kind ?? null, Number(page) || 1),
   )
 
-  ipcMain.handle(IPC.remoteDetail, async (_event, mediaId: string) => kanjuDetail(String(mediaId)))
-
-  ipcMain.handle(IPC.remoteEpisodes, async (_event, mediaId: string) =>
-    kanjuEpisodes(String(mediaId)),
+  ipcMain.handle(
+    IPC.remoteSearch,
+    async (_event, provider: RemoteProviderId, keyword: string, page: number) =>
+      provider === 'hongguo'
+        ? hongguoSearch(String(keyword ?? ''), Number(page) || 1)
+        : kanjuSearch(String(keyword ?? ''), Number(page) || 1),
   )
 
-  ipcMain.handle(IPC.remoteResolve, async (_event, episodeToken: string, lineId?: string) =>
-    kanjuResolve(String(episodeToken), lineId),
+  ipcMain.handle(IPC.remoteDetail, async (_event, provider: RemoteProviderId, mediaId: string) =>
+    provider === 'hongguo' ? hongguoDetail(String(mediaId)) : kanjuDetail(String(mediaId)),
+  )
+
+  ipcMain.handle(IPC.remoteEpisodes, async (_event, provider: RemoteProviderId, mediaId: string) =>
+    provider === 'hongguo' ? hongguoEpisodes(String(mediaId)) : kanjuEpisodes(String(mediaId)),
+  )
+
+  ipcMain.handle(
+    IPC.remoteResolve,
+    async (_event, provider: RemoteProviderId, episodeToken: string, lineId?: string) =>
+      provider === 'hongguo'
+        ? hongguoResolve(String(episodeToken), lineId, {
+            serveLocal: (localPath: string) => {
+              mediaAccess.authorize([localPath])
+              return toMediaUrl(localPath)
+            },
+          })
+        : kanjuResolve(String(episodeToken), lineId),
   )
 }
 
@@ -245,6 +277,7 @@ const selfCheck = process.argv.includes('--self-check')
 
 // ==================== 生命周期 ====================
 void app.whenReady().then(async () => {
+  configureHongguo({ cacheDir: join(app.getPath('userData'), 'hongguo-cache') })
   registerMediaProtocol()
   registerIpc()
 

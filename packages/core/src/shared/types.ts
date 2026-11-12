@@ -5,8 +5,8 @@
 /** 内容类型。与 iOS `MediaKind` 对齐。 */
 export type MediaKind = 'movie' | 'series' | 'anime' | 'variety'
 
-/** 媒体来源标识：本地扫描的文件，或在线片源（如「看剧AI」）。 */
-export type MediaSourceId = 'local' | 'kanju'
+/** 媒体来源标识：本地扫描的文件，或在线片源（「看剧AI」/「红果短剧」）。 */
+export type MediaSourceId = 'local' | 'kanju' | 'hongguo'
 
 /** 统一的媒体条目。电影与剧集共用一个模型，用 `kind` 区分。 */
 export interface MediaItem {

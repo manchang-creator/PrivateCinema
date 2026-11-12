@@ -64,7 +64,10 @@ export function PlayerScreen({
   const [brightnessError, setBrightnessError] = useState<string | null>(null)
 
   // 在线片源：按集 token 现解析播放地址。null 表示自动选线。
-  const isRemote = episode.source === 'kanju' || (episode.episodeToken ?? '') !== ''
+  // 红果走 hongguo 适配器，其余远端（含看剧AI）默认 kanju。
+  const remoteProvider = episode.source === 'hongguo' ? 'hongguo' : 'kanju'
+  const isRemote =
+    episode.source === 'kanju' || episode.source === 'hongguo' || (episode.episodeToken ?? '') !== ''
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
   const [lines, setLines] = useState<RemoteLine[]>([])
@@ -89,7 +92,7 @@ export function PlayerScreen({
     setError(null)
     setResolvedSrc(null)
     void window.cinema
-      .remoteResolve(token, selectedLineId ?? undefined)
+      .remoteResolve(remoteProvider, token, selectedLineId ?? undefined)
       .then((playback) => {
         if (cancelled) return
         setResolvedSrc(playback.url)
@@ -106,7 +109,7 @@ export function PlayerScreen({
     return () => {
       cancelled = true
     }
-  }, [isRemote, episode.episodeToken, selectedLineId])
+  }, [isRemote, episode.episodeToken, episode.source, selectedLineId])
 
   const src = isRemote ? (resolvedSrc ?? '') : toMediaUrl(episode.filePath)
 
