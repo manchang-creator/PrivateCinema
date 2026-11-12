@@ -1,0 +1,85 @@
+name: linux-build
+
+# Linux 客户端 CI：静态检查 + 单测 + 构建 + 解包打包校验。
+# 与 windows-build.yml 同构：只做可重复验证的事，不启动图形界面、不发版。
+# 触发范围限定在 linux/、共享内核 packages/core 与其工作流本身。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'linux/**'
+      - 'packages/core/**'
+      - '.github/workflows/linux-build.yml'
+  pull_request:
+    paths:
+      - 'linux/**'
+      - 'packages/core/**'
+      - '.github/workflows/linux-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: typecheck / test / build / pack
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: linux
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 锁 20.19.0：与 windows 工作流、本地一致，是当前依赖栈的硬上限（见 linux/AGENTS.md §2）。
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: npm
+          cache-dependency-path: linux/package-lock.json
+
+      # 跳过 electron 二进制下载：typecheck / test / build 都不需要它，能省掉一次
+      # 上百 MB 的 GitHub Release 下载（runner 上本来就慢）。
+      # 打包步骤再单独装，避免这里被网络问题拖挂。
+      - name: 安装依赖（跳过 electron 二进制）
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元测试
+        run: npm test
+
+      - name: 构建
+        run: npm run build
+
+      - name: 校验构建产物
+        run: |
+          for file in out/main/index.js out/preload/index.js out/renderer/index.html; do
+            if [ ! -f "$file" ]; then
+              echo "::error::缺少构建产物 $file"
+              exit 1
+            fi
+            echo "$file  $(wc -c < "$file") bytes"
+          done
+
+      # 解包打包：验证 electron-builder 配置、asar 内容与随包分发的 udev 规则。
+      # 不出 AppImage（需要额外工具集下载），发版不在此工作流职责内。
+      - name: 解包打包校验
+        run: npm run dist:dir
+
+      - name: 校验打包产物
+        run: |
+          test -x release/linux-unpacked/private-cinema || { echo '::error::缺少可执行文件'; exit 1; }
+          test -f release/linux-unpacked/resources/udev/90-private-cinema-backlight.rules || { echo '::error::缺少 udev 规则'; exit 1; }
+          ./node_modules/.bin/asar list release/linux-unpacked/resources/app.asar > asar.txt
+          grep -q '^/out/main/index.js$' asar.txt || { echo '::error::asar 内缺少主进程产物'; exit 1; }
+          echo '打包产物校验通过'

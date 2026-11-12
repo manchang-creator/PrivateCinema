@@ -9,12 +9,15 @@
 
 ## 0. 当前阶段（2026-11-08 起 · 优先级最高）
 
-**iOS 客户端已暂停废弃，不再测试、不再验收。** 当前工作重心是 **Windows 客户端**。
+**iOS 客户端已暂停废弃，不再测试、不再验收。** 当前工作重心是 **Windows / Linux 桌面客户端**。
 
 - **禁止**为 iOS 端启动或等待 CI（`.github/workflows/ios-build.yml` 的单元测试、UI 截图），禁止做 iOS 编译验收与单测修复。
 - **禁止**主动推送 `refactor/player-acceptance` 分支；已推内容保持原状，不回滚、不清理。
 - 除非用户明确要求恢复 iOS 工作，否则一切 iOS 相关任务（改页面、改播放器、跑测试）一律不做，先确认阶段。
-- 新建的 Windows 客户端工程与本文档的 iOS 规则分离：Windows 端另立工程目录与自己的 `AGENTS.md`，不得套用 Swift / Tuist / Xcode 约定。
+- 新建的桌面客户端工程与本文档的 iOS 规则分离，各自另立工程目录与自己的 `AGENTS.md`，不得套用 Swift / Tuist / Xcode 约定：
+  - `windows/` → Electron + React（Windows），约定见 `windows/AGENTS.md`
+  - `linux/` → Electron + React（Linux，含 sysfs / DDC-CI 亮度），约定见 `linux/AGENTS.md`
+  - `packages/core/` → 两端共用的跨平台内核（`@private-cinema/core`：领域模型、IPC 契约、弹幕引擎、字幕解析）。**改这里等于改两端的协议**，必须同时验证 `windows/` 与 `linux/`。
 
 ---
 

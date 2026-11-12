@@ -2,17 +2,20 @@ name: windows-build
 
 # Windows 客户端 CI：静态检查 + 单测 + 构建。
 # 只做可重复验证的三件事，不做打包、不发版、不启动应用窗口。
-# 触发范围限定在 windows/ 与其工作流本身，避免 iOS 改动白白消耗 runner。
+# 触发范围限定在 windows/、共享内核 packages/core 与其工作流本身，
+# 避免 iOS 改动白白消耗 runner。
 
 on:
   push:
     branches: [main]
     paths:
       - 'windows/**'
+      - 'packages/core/**'
       - '.github/workflows/windows-build.yml'
   pull_request:
     paths:
       - 'windows/**'
+      - 'packages/core/**'
       - '.github/workflows/windows-build.yml'
   workflow_dispatch:
 
