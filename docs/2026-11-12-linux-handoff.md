@@ -57,7 +57,7 @@ a27db23 docs(repo): 补充 Linux 客户端分工与构建工作流
 
 ### 3.2 `linux/`（新增）
 
-完整目录与职责见 `linux/AGENTS.md` §3，这里只列**非显然**的部分：
+完整目录与职责见 `linux/` 源码，这里只列**非显然**的部分：
 
 - `src/main/brightness.ts` —— 两条后端合流。sysfs 读 `/sys/class/backlight/*/{max_brightness,brightness,type}`；
   ddcutil 用 `detect --brief` + `getvcp 10 --brief --bus N` + `setvcp 10`，`execFile` 超时 8000ms。
@@ -95,8 +95,7 @@ a27db23 docs(repo): 补充 Linux 客户端分工与构建工作流
 - 新增 `.github/workflows/linux-build.yml`（ubuntu-latest，Node 20.19.0）：
   `npm ci`（`ELECTRON_SKIP_BINARY_DOWNLOAD=1`）→ typecheck → test → build → 校验 out 三产物 →
   `dist:dir` → 校验可执行文件 / udev 规则 / `asar list` 里有 `/out/main/index.js`。
-- 根 `AGENTS.md` §0、`README.md` 增加三处分工与桌面端章节。
-- `linux/AGENTS.md` 全文约定（含亮度设计、六级验证）。
+- `README.md` 增加三处分工与桌面端章节。
 
 ---
 
@@ -139,7 +138,7 @@ a27db23 docs(repo): 补充 Linux 客户端分工与构建工作流
    --action=change --subsystem-match=backlight`；外接屏需 `sudo apt install ddcutil` +
    用户加入 `i2c` 组。**未获得 sudo 授权，未执行。**
 3. **`electron out/main/index.js` 直跑会挂住**：本机 X11 下连空脚本都挂，与自检代码无关。
-   一律用 electron-builder 产出的二进制做自检。已写进 `linux/AGENTS.md` §7。
+   一律用 electron-builder 产出的二进制做自检。
 4. **Chromium 直连不支持 MKV**：与 Windows 端同源限制，播放会报
    `MEDIA_ERR_SRC_NOT_SUPPORTED`（现已把错误码显示到界面）。要支持需引入 WebCodecs 自解码或外部播放器，
    属独立议题，未做。
