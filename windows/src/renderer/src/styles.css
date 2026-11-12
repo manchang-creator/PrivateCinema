@@ -1276,24 +1276,22 @@ select {
   line-height: 1.5;
 }
 
-/* ==================== 主界面亮度菜单（顶栏弹出） ==================== */
-.brightness-menu {
+/* ==================== 显示菜单（外观 + 屏幕亮度，顶栏弹出） ==================== */
+.display-menu {
   position: relative;
 }
-.brightness-menu .btn-ghost.active {
+.display-menu .btn-ghost.active {
   background: var(--surface-2);
   color: var(--text);
 }
-.brightness-popover {
+.display-popover {
   position: absolute;
   top: calc(100% + 10px);
   right: 0;
   z-index: 40;
-  width: 300px;
-  padding: 16px 18px;
-  background: rgba(20, 23, 30, 0.98);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  width: 304px;
+  padding: 14px 16px;
+  background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
@@ -1302,29 +1300,41 @@ select {
   gap: 12px;
   animation: modal-rise 0.16s ease;
 }
-.brightness-popover-head {
+.display-section {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 13px;
-  font-weight: 600;
+  flex-direction: column;
+  gap: 8px;
 }
-.brightness-popover-close {
-  width: 26px;
-  height: 26px;
+.display-section-title {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.display-theme {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--surface-3);
+  gap: 6px;
+}
+.display-theme-btn {
+  flex: 1;
+  padding: 7px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-size: 15px;
-  line-height: 1;
+  font-size: 12px;
 }
-.brightness-popover-close:hover {
+.display-theme-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
   color: var(--text);
+}
+.display-theme-btn.active {
+  background: var(--accent-soft);
+  border-color: rgba(91, 140, 255, 0.35);
+  color: var(--accent-strong);
+}
+.display-divider {
+  height: 1px;
+  background: var(--border);
 }
 .brightness-name-text {
   overflow: hidden;
@@ -1405,84 +1415,6 @@ select {
   }
 }
 
-/* ==================== 外观菜单（跟随系统 / 浅色 / 深色） ==================== */
-.theme-menu {
-  position: relative;
-}
-.theme-menu .btn-ghost.active {
-  background: var(--surface-2);
-  color: var(--text);
-}
-.theme-current {
-  margin-left: 6px;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-.theme-popover {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 40;
-  width: 244px;
-  padding: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-2);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  animation: modal-rise 0.16s ease;
-}
-.theme-popover-head {
-  font-size: 12px;
-  color: var(--text-faint);
-  padding: 2px 6px 4px;
-}
-.theme-options {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.theme-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-align: left;
-  padding: 9px 10px;
-  border-radius: var(--r-md);
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text);
-}
-.theme-option:hover:not(:disabled) {
-  background: var(--surface-2);
-  border-color: transparent;
-}
-.theme-option.active {
-  background: var(--accent-soft);
-  border-color: rgba(91, 140, 255, 0.32);
-}
-.theme-option-check {
-  width: 16px;
-  flex: none;
-  color: var(--accent-strong);
-  font-weight: 700;
-}
-.theme-option-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.theme-option-label {
-  font-size: 13px;
-  font-weight: 600;
-}
-.theme-option-hint {
-  font-size: 11px;
-  color: var(--text-faint);
-}
-
 /* ==================== 浅色主题（白色） ==================== */
 :root[data-theme='light'] {
   --bg: #f3f4f7;
@@ -1539,9 +1471,6 @@ select {
 :root[data-theme='light'] .library-error,
 :root[data-theme='light'] .brightness-error {
   color: var(--danger);
-}
-:root[data-theme='light'] .brightness-popover {
-  background: var(--surface);
 }
 :root[data-theme='light'] .remote-modal-mask {
   background: rgba(20, 26, 40, 0.42);
