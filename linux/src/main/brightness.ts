@@ -16,10 +16,15 @@
 // - 写入必须节流：ddcutil 单次往返上百毫秒，逐次直发会让主进程被阻塞。节流在渲染层做。
 
 import { execFile } from 'node:child_process'
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, readdir, readFile, writeFile } from 'node:fs/promises'
 import type { BrightnessWriteResult, DisplayBrightness } from '@private-cinema/core/shared'
 
 const BACKLIGHT_ROOT = '/sys/class/backlight'
+// X11 软件调光（xrandr 的 --brightness，本质是缩放 gamma）：不需要 root，覆盖 sysfs 无写权限时的场景。
+// 只在「硬件背光不可写」时作为兜底出现，避免和真实背光滑块抢占。
+const XRANDR_MIN = 10
+const XRANDR_MAX = 100
 
 // ==================== 纯逻辑（可单测） ====================
 
@@ -100,6 +105,21 @@ export async function listSysfsBacklights(): Promise<DisplayBrightness[]> {
         continue
       }
       const type = rawType.trim()
+      // 能读不代表能写：brightness 节点通常是 root:root 0644，非 video 组用户写入会 EACCES。
+      // 没有写权限就如实标记为不可用（并给原因），而不是给一个拖了没反应的滑块。
+      const writable = await access(`${dir}/brightness`, constants.W_OK)
+        .then(() => true)
+        .catch(() => false)
+      if (!writable) {
+        results.push({
+          id,
+          label: type === '' ? name : `${name}（${type}）`,
+          primary: type === 'raw',
+          available: false,
+          reason: '当前用户没有背光写入权限：安装 udev 规则并把用户加入 video 组后可启用硬件调光',
+        })
+        continue
+      }
       results.push({
         id,
         label: type === '' ? name : `${name}（${type}）`,
@@ -235,6 +255,90 @@ async function setDdcutilBrightness(bus: number, value: number): Promise<Brightn
   return { ok: true }
 }
 
+// ==================== 后端：xrandr（X11 软件调光） ====================
+
+function runXrandr(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    execFile('xrandr', args, { timeout: 5000 }, (error, stdout, stderr) => {
+      const code = error === null ? 0 : ((error as NodeJS.ErrnoException).code === 'ENOENT' ? -1 : 1)
+      resolve({ code, stdout: stdout ?? '', stderr: stderr ?? '' })
+    })
+  })
+}
+
+/** 解析 `xrandr --query` 里已连接（connected）的输出。纯逻辑，可单测。 */
+export function parseXrandrConnected(output: string): { name: string; primary: boolean }[] {
+  const result: { name: string; primary: boolean }[] = []
+  for (const line of output.split('\n')) {
+    const match = /^(\S+)\s+connected\s+(primary\s+)?\d+\s*x\s*\d+/.exec(line.trim())
+    if (match !== null) {
+      result.push({ name: match[1], primary: match[2] !== undefined })
+    }
+  }
+  return result
+}
+
+/**
+ * 从 `xrandr --verbose` 取出指定输出的 `Brightness:`（0..1+）。
+ * 每个输出块以 `NAME connected/disconnected` 开头，属性行缩进在其后。
+ */
+export function parseXrandrBrightness(output: string, outputName: string): number | null {
+  let current = ''
+  for (const line of output.split('\n')) {
+    const head = /^(\S+)\s+(connected|disconnected)\b/.exec(line)
+    if (head !== null) {
+      current = head[1]
+      continue
+    }
+    if (current !== outputName) continue
+    const bright = /Brightness:\s*([0-9.]+)/.exec(line)
+    if (bright !== null) {
+      const value = Number.parseFloat(bright[1])
+      return Number.isFinite(value) ? value : null
+    }
+  }
+  return null
+}
+
+/**
+ * 枚举 X11 软件调光目标。仅在硬件背光不可写时由 listDisplays 调用。
+ * 无 DISPLAY（如原生 Wayland）或未安装 xrandr 时返回空表。
+ */
+async function listXrandrScreens(): Promise<DisplayBrightness[]> {
+  if ((process.env.DISPLAY ?? '') === '') return []
+  const query = await runXrandr(['--query'])
+  if (query.code !== 0) return []
+  const outputs = parseXrandrConnected(query.stdout)
+  if (outputs.length === 0) return []
+  const target = outputs.find((item) => item.primary) ?? outputs[0]
+  const verbose = await runXrandr(['--verbose'])
+  const raw = verbose.code === 0 ? parseXrandrBrightness(verbose.stdout, target.name) : null
+  const current = Math.round((raw ?? 1) * 100)
+  return [
+    {
+      id: `xrandr:${target.name}`,
+      label: `${target.name}（X11 软件调光）`,
+      primary: outputs.length === 1 || target.primary,
+      available: true,
+      current: Math.min(XRANDR_MAX, Math.max(XRANDR_MIN, current)),
+      min: XRANDR_MIN,
+      max: XRANDR_MAX,
+    },
+  ]
+}
+
+async function setXrandrBrightness(outputName: string, value: number): Promise<BrightnessWriteResult> {
+  if ((process.env.DISPLAY ?? '') === '') return { ok: false, reason: '没有可用的 X11 显示（DISPLAY 未设置）' }
+  const target = clampBrightness(value, XRANDR_MIN, XRANDR_MAX)
+  const brightness = (target / 100).toFixed(2)
+  const write = await runXrandr(['--output', outputName, '--brightness', brightness])
+  if (write.code !== 0) {
+    const detail = write.stderr.trim().split('\n').slice(-1)[0] ?? ''
+    return { ok: false, reason: detail === '' ? 'xrandr 设置亮度失败' : `xrandr 设置亮度失败：${detail}` }
+  }
+  return { ok: true }
+}
+
 // ==================== 对外接口 ====================
 
 /**
@@ -245,17 +349,25 @@ async function setDdcutilBrightness(bus: number, value: number): Promise<Brightn
 export async function listDisplays(): Promise<DisplayBrightness[]> {
   const sysfs = await listSysfsBacklights()
   const ddc = await listDdcutilDisplays()
-  const all = [...sysfs, ...ddc.displays]
-  if (all.length > 0) return all
-  return [
-    {
-      id: 'none',
-      label: '显示器',
-      primary: false,
-      available: false,
-      reason: ddc.reason ?? '未找到可控制的显示器（sysfs 无背光设备，且未检测到 DDC/CI 显示器）',
-    },
-  ]
+  const hardware = [...sysfs, ...ddc.displays]
+  const hasUsable = hardware.some((display) => display.available)
+  // 硬件背光都不可写时，用 X11 软件调光兜底，保证「亮度能变」而不是只剩一条原因。
+  const fallback = hasUsable ? [] : await listXrandrScreens()
+  const all = [...hardware, ...fallback]
+  if (all.length === 0) {
+    return [
+      {
+        id: 'none',
+        label: '显示器',
+        primary: false,
+        available: false,
+        reason:
+          ddc.reason ?? '未找到可控制的显示器（sysfs 无背光设备，且未检测到 DDC/CI 显示器）',
+      },
+    ]
+  }
+  // 可用的排前面：用户第一眼就落在能生效的滑块上
+  return all.sort((a, b) => Number(b.available) - Number(a.available))
 }
 
 /** 设置亮度。`id` 形如 `sysfs:nvidia_0` 或 `ddc:4`，由 `listDisplays` 给出。 */
@@ -270,6 +382,9 @@ export async function setDisplayBrightness(id: string, value: number): Promise<B
     const bus = Number.parseInt(key, 10)
     if (!Number.isFinite(bus)) return { ok: false, reason: `非法显示器标识 ${id}` }
     return setDdcutilBrightness(bus, value)
+  }
+  if (kind === 'xrandr' && key !== undefined && key !== '') {
+    return setXrandrBrightness(key, value)
   }
   if (id === 'none') return { ok: false, reason: '没有可控制的显示器' }
   return { ok: false, reason: `未知显示器标识 ${id}` }

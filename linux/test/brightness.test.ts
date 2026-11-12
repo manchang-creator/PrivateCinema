@@ -4,6 +4,8 @@ import {
   describeDdcutilError,
   parseDdcutilDetect,
   parseDdcutilVcp,
+  parseXrandrBrightness,
+  parseXrandrConnected,
 } from '../src/main/brightness'
 
 // ==================== 亮度纯逻辑 ====================
@@ -96,5 +98,40 @@ describe('describeDdcutilError', () => {
 
   it('其它错误原样带上最后一行，便于排查', () => {
     expect(describeDdcutilError('first line\nlast line detail', true)).toContain('last line detail')
+  })
+})
+
+describe('parseXrandrConnected', () => {
+  it('只取 connected 输出，并识别 primary', () => {
+    const output = [
+      'Screen 0: minimum 8 x 8, current 1920 x 1080, maximum 32767 x 32767',
+      'DP-0 disconnected (normal left inverted right x axis y axis)',
+      'DP-2 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 344mm x 193mm',
+      'HDMI-0 disconnected (normal left inverted right x axis y axis)',
+    ].join('\n')
+
+    expect(parseXrandrConnected(output)).toEqual([{ name: 'DP-2', primary: true }])
+  })
+
+  it('没有连接输出时返回空表', () => {
+    expect(parseXrandrConnected('eDP-1 disconnected 0x0+0+0')).toEqual([])
+  })
+})
+
+describe('parseXrandrBrightness', () => {
+  it('取指定输出块的 Brightness 值', () => {
+    const verbose = [
+      'DP-2 connected primary 1920x1080+0+0 (0x4b) normal',
+      '\tGamma:      1.0:1.0:1.0',
+      '\tBrightness: 0.60',
+      'HDMI-0 disconnected (normal)',
+      '\tBrightness: 1.00',
+    ].join('\n')
+
+    expect(parseXrandrBrightness(verbose, 'DP-2')).toBe(0.6)
+  })
+
+  it('找不到目标输出时返回 null', () => {
+    expect(parseXrandrBrightness('eDP-1 disconnected\n\tBrightness: 1.0', 'DP-2')).toBeNull()
   })
 })

@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState, type CSSProperties, type JSX } from '
 import type { Episode, MediaItem, WatchProgress } from '@private-cinema/core/shared'
 import { formatSize, formatTime } from '@private-cinema/core/ui'
 import { OnlineLibrary } from './OnlineLibrary'
+import { BrightnessMenu } from './BrightnessMenu'
+import { ThemeMenu } from './ThemeMenu'
 
 interface Props {
   items: MediaItem[]
@@ -104,16 +106,20 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
             在线片库
           </button>
         </div>
-        {tab === 'local' && (
-          <div className="library-actions">
-            <button disabled={busy} onClick={() => void scan('files')}>
-              选择视频文件
-            </button>
-            <button className="btn-primary" disabled={busy} onClick={() => void scan('folder')}>
-              选择文件夹
-            </button>
-          </div>
-        )}
+        <div className="library-actions">
+          <BrightnessMenu />
+          <ThemeMenu />
+          {tab === 'local' && (
+            <>
+              <button disabled={busy} onClick={() => void scan('files')}>
+                选择视频文件
+              </button>
+              <button className="btn-primary" disabled={busy} onClick={() => void scan('folder')}>
+                选择文件夹
+              </button>
+            </>
+          )}
+        </div>
       </header>
 
       {tab === 'online' && <OnlineLibrary onPlay={onPlay} />}

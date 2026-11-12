@@ -9,7 +9,7 @@ Apple TV + Infuse 风格的极简私人影视中心（iOS / Windows / Linux）�
 
 iOS 客户端已暂停验收，当前迭代重心在桌面端。两者共用跨平台内核
 `packages/core`（`@private-cinema/core`：领域模型、IPC 契约、弹幕引擎、字幕解析），
-各自的壳与约定见 `windows/AGENTS.md`、`linux/AGENTS.md`。
+各自的壳分别位于 `windows/`、`linux/` 目录。
 
 | 端 | 目录 | 系统专属能力 |
 |---|---|---|
@@ -30,6 +30,7 @@ bash scripts/linux-smoke.sh   # 真机自检：背光 / ddcutil / 产物 / 启�
 
 > 亮度需要用户侧授权：内置屏装 `linux/build/udev/90-private-cinema-backlight.rules`（背光节点归 `video` 组），
 > 外接屏装 `ddcutil` 并把用户加入 `i2c` 组。应用本身不提权，检测不到权限会返回带原因的提示。
+> 若硬件背光不可写且运行在 X11，会自动回退到 `xrandr` 软件调光（缩放 gamma，无需 root），保证亮度仍可调。
 
 ## 环境要求
 

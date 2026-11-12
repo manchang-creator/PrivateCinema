@@ -3,7 +3,7 @@
 // 分类/搜索 → 卡片网格 → 详情弹层（选集）→ 交给 App 进入播放。
 // 播放地址不在这里解析：进入播放页后由 PlayerScreen 按集 token 现解析。
 
-import { useCallback, useEffect, useState, type JSX } from 'react'
+import { useCallback, useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type {
   Episode,
   MediaItem,
@@ -28,6 +28,125 @@ const KIND_TABS: ReadonlyArray<{ key: MediaKind | null; label: string }> = [
 
 function messageOf(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
+}
+
+/**
+ * 首页货架：横向滚动，但隐藏原生滚动条（那条灰长的横条）。
+ * 用左右渐隐暗示还有内容，悬浮时给出翻页箭头；纵向滚轮也映射为横向翻动。
+ */
+function RemoteRail({
+  cards,
+  renderCard,
+}: {
+  cards: RemoteCard[]
+  renderCard: (card: RemoteCard) => JSX.Element
+}): JSX.Element {
+  const scroller = useRef<HTMLDivElement>(null)
+  const [reach, setReach] = useState({ left: false, right: false })
+
+  const sync = useCallback(() => {
+    const el = scroller.current
+    if (el === null) return
+    const max = el.scrollWidth - el.clientWidth
+    if (max <= 1) {
+      setReach({ left: false, right: false })
+      return
+    }
+    setReach({ left: el.scrollLeft > 2, right: el.scrollLeft < max - 2 })
+  }, [])
+
+  useEffect(() => {
+    sync()
+    const el = scroller.current
+    if (el === null) return
+    const observer = new ResizeObserver(sync)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [sync, cards])
+
+  // 纵向滚轮映射为横向翻动；到达两端后交还给页面纵向滚动
+  useEffect(() => {
+    const el = scroller.current
+    if (el === null) return
+    const onWheel = (event: WheelEvent): void => {
+      const max = el.scrollWidth - el.clientWidth
+      if (max <= 1 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
+      const goingRight = event.deltaY > 0
+      if ((goingRight && el.scrollLeft >= max - 1) || (!goingRight && el.scrollLeft <= 1)) return
+      event.preventDefault()
+      el.scrollLeft += event.deltaY
+      sync()
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [sync])
+
+  const page = useCallback((direction: 1 | -1) => {
+    const el = scroller.current
+    if (el === null) return
+    el.scrollBy({ left: direction * el.clientWidth * 0.82, behavior: 'smooth' })
+  }, [])
+
+  // 键盘：卡片获得焦点后，左右方向键翻页，Home/End 到两端（流媒体货架常见做法）
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const el = scroller.current
+      if (el === null) return
+      if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        page(1)
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        page(-1)
+      } else if (event.key === 'Home') {
+        event.preventDefault()
+        el.scrollTo({ left: 0, behavior: 'smooth' })
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' })
+      }
+    },
+    [page],
+  )
+
+  const fadeClass = `${reach.left ? ' fade-left' : ''}${reach.right ? ' fade-right' : ''}`
+
+  return (
+    <div className="remote-rail-wrap">
+      <div
+        className={`remote-rail${fadeClass}`}
+        ref={scroller}
+        onScroll={sync}
+        onKeyDown={handleKeyDown}
+      >
+        {cards.map(renderCard)}
+      </div>
+      {reach.left && (
+        <button
+          type="button"
+          className="rail-nav rail-nav-prev"
+          aria-label="向左浏览"
+          onClick={() => page(-1)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
+        </button>
+      )}
+      {reach.right && (
+        <button
+          type="button"
+          className="rail-nav rail-nav-next"
+          aria-label="向右浏览"
+          onClick={() => page(1)}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function OnlineLibrary({ onPlay }: Props): JSX.Element {
@@ -249,7 +368,7 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
                 <h2>{section.title}</h2>
                 {section.subtitle !== '' && <span>{section.subtitle}</span>}
               </div>
-              <div className="remote-rail">{section.cards.map(renderCard)}</div>
+              <RemoteRail cards={section.cards} renderCard={renderCard} />
             </section>
           ))}
         </div>
