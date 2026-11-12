@@ -1,7 +1,7 @@
 name: windows-build
 
-# Windows 客户端 CI：静态检查 + 单测 + 构建。
-# 只做可重复验证的三件事，不做打包、不发版、不启动应用窗口。
+# Windows 客户端 CI：静态检查 + 单测 + 构建 + 解包打包校验。
+# 与 linux-build.yml 同构：只做可重复验证的事，不启动图形界面、不发版。
 # 触发范围限定在 windows/、共享内核 packages/core 与其工作流本身，
 # 避免 iOS 改动白白消耗 runner。
 
@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   build:
-    name: typecheck / test / build
+    name: typecheck / test / build / pack
     runs-on: windows-latest
     defaults:
       run:
@@ -37,7 +37,7 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 锁 20.19.0：与本地一致，且是当前依赖栈的硬上限（见 windows/AGENTS.md §2）。
+      # 锁 20.19.0：与 linux 工作流、本地一致，是当前依赖栈的硬上限。
       # 升到 22 会改变 vite / vitest 的解析行为，验证结果就不再可重复。
       - name: 安装 Node
         uses: actions/setup-node@v4
@@ -46,8 +46,13 @@ jobs:
           cache: npm
           cache-dependency-path: windows/package-lock.json
 
-      - name: 安装依赖
+      # 跳过 electron 二进制下载：typecheck / test / build 都不需要它。
+      # 打包步骤由 electron-builder 自行按 build.electronDownload.mirror 拉取，
+      # 避免这里被一次上百 MB 的 GitHub Release 下载拖挂。
+      - name: 安装依赖（跳过 electron 二进制）
         run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
       - name: 类型检查
         run: npm run typecheck
@@ -74,3 +79,41 @@ jobs:
             $size = (Get-Item $file).Length
             Write-Host "$file  $size bytes"
           }
+
+      # 解包打包：验证 electron-builder 配置、asar 内容与 koffi 原生模块解包（asarUnpack）。
+      # 不出 NSIS / portable 安装包（发版不在此工作流职责内，日常校验 --dir 即可）。
+      - name: 解包打包校验
+        run: npm run dist:dir
+
+      - name: 校验打包产物
+        shell: pwsh
+        run: |
+          $exe = 'release/win-unpacked/PrivateCinema.exe'
+          if (-not (Test-Path $exe)) {
+            Write-Host "::error::缺少可执行文件 $exe"
+            exit 1
+          }
+          Write-Host "$exe  $((Get-Item $exe).Length) bytes"
+
+          # koffi 是原生模块，必须落在 asar 外（asarUnpack），否则亮度 FFI 在运行时加载失败。
+          # 注意：koffi 3.x 的原生实现拆在 @koromix/koffi-<platform>-<arch> 可选依赖里，
+          # 平台二进制不一定在 node_modules/koffi 下，所以在整个 unpacked 目录里找 koffi.node。
+          $koffi = Get-ChildItem -Path 'release/win-unpacked/resources/app.asar.unpacked' -Recurse -Filter 'koffi.node' -ErrorAction SilentlyContinue
+          if (-not $koffi) {
+            Write-Host "::error::app.asar.unpacked 内缺少 koffi 原生模块（asarUnpack 未生效）"
+            exit 1
+          }
+          $winBinary = $koffi | Where-Object { $_.FullName -match 'win32' }
+          if (-not $winBinary) {
+            Write-Host "::error::未找到 win32 版 koffi 原生模块"
+            exit 1
+          }
+          foreach ($f in $koffi) { Write-Host "koffi native: $($f.FullName)" }
+
+          # asar 内必须含主进程产物（与 linux 工作流对齐）。
+          & .\node_modules\.bin\asar.cmd list release/win-unpacked/resources/app.asar | Out-File -Encoding utf8 asar.txt
+          if (-not (Select-String -Path asar.txt -Pattern '^/out/main/index\.js$' -Quiet)) {
+            Write-Host "::error::asar 内缺少主进程产物"
+            exit 1
+          }
+          Write-Host '打包产物校验通过'

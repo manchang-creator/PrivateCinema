@@ -3,6 +3,10 @@ node_modules/
 out/
 dist/
 release/
+# Windows 客户端自己的 build/ 资源（图标）要入库；根 .gitignore 的 "build/"
+# 只服务于 Tuist/xcodebuild，这里做一次反向排除。
+!build/
+!build/icon.ico
 
 # 缓存
 .vite/

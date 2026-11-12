@@ -1,6 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron'
 import { join } from 'node:path'
-import { IPC, type MediaKind, type ProgressQuery, type SubtitleFile } from '@private-cinema/core/shared'
+import {
+  IPC,
+  type BrightnessWriteResult,
+  type MediaKind,
+  type ProgressQuery,
+  type SubtitleFile,
+} from '@private-cinema/core/shared'
 import { MEDIA_SCHEME } from '@private-cinema/core/shared'
 import type { WatchProgress } from '@private-cinema/core/shared'
 import { buildLibrary, collectVideoFiles } from './library'
@@ -180,10 +186,79 @@ function registerIpc(): void {
   )
 }
 
+// ==================== 命令行自检 ====================
+// `--self-check` 走与界面完全相同的 IPC 处理函数，把结果打到 stdout 后退出。
+// 用途：无键盘 / 远程 / CI 环境下确认「主进程能起来、IPC 能通、亮度能枚举、在线源可达」，
+// 不必靠人眼看窗口。它不测播放（那需要真实视频文件与交互）。
+// 注意：必须用 electron-builder 产出的包运行（`release/win-unpacked/PrivateCinema.exe
+// --self-check`）。直接 `electron out/main/index.js --self-check` 在无头/无桌面环境可能卡住，
+// 属 Electron 直跑的环境问题，与自检代码无关。
+
+// 自检结果必须先把 stdout 写完再退出：stdout 指向管道时 write 是异步的，
+// 直接 app.exit 会截断输出；而入口处的进程级 exit 又会让 Electron 继续跑事件循环。
+function writeSelfCheck(text: string): void {
+  process.stdout.write(text, () => app.exit(0))
+}
+
+async function runSelfCheck(): Promise<void> {
+  const { listDisplays, setDisplayBrightness } = await import('./brightness')
+  // Windows 端亮度是同步 FFI；await 对非 Promise 值等同于直接取用。
+  const displays = await listDisplays()
+
+  // 可用的显示器做一次「读当前值再写回原值」的往返：绝不改变用户的实际亮度，
+  // 但能把写权限 / DDC/CI 问题在自检里暴露出来（失败返回带原因的结果）。
+  const writeProbe: { id: string; result: BrightnessWriteResult }[] = []
+  for (const display of displays) {
+    if (!display.available) continue
+    writeProbe.push({
+      id: display.id,
+      result: await setDisplayBrightness(display.id, display.current ?? 0),
+    })
+  }
+
+  // 在线片源连通性探针：失败不影响自检结论，只把原因带进报告。
+  let remote: { ok: boolean; sections?: number; sample?: string; error?: string }
+  try {
+    const home = await kanjuHome()
+    remote = {
+      ok: true,
+      sections: home.sections.length,
+      sample: home.sections[0]?.cards[0]?.title,
+    }
+  } catch (error) {
+    remote = { ok: false, error: (error as Error).message }
+  }
+
+  const report = {
+    platform: process.platform,
+    electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    userData: app.getPath('userData'),
+    displays,
+    writeProbe,
+    remote,
+  }
+  writeSelfCheck(`SELF_CHECK ${JSON.stringify(report, null, 2)}\n`)
+}
+
+const selfCheck = process.argv.includes('--self-check')
+
 // ==================== 生命周期 ====================
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   registerMediaProtocol()
   registerIpc()
+
+  if (selfCheck) {
+    try {
+      await runSelfCheck()
+    } catch (error) {
+      process.stderr.write(`SELF_CHECK_FAILED ${(error as Error).message}\n`)
+      app.exit(1)
+      return
+    }
+    return
+  }
+
   createWindow()
 
   app.on('activate', () => {
