@@ -5,8 +5,7 @@ import { useCallback, useEffect, useState, type CSSProperties, type JSX } from '
 import type { Episode, MediaItem, WatchProgress } from '@private-cinema/core/shared'
 import { formatSize, formatTime } from '@private-cinema/core/ui'
 import { OnlineLibrary } from './OnlineLibrary'
-import { BrightnessMenu } from './BrightnessMenu'
-import { ThemeMenu } from './ThemeMenu'
+import { DisplayMenu } from './DisplayMenu'
 
 interface Props {
   items: MediaItem[]
@@ -107,8 +106,7 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
           </button>
         </div>
         <div className="library-actions">
-          <BrightnessMenu />
-          <ThemeMenu />
+          <DisplayMenu />
           {tab === 'local' && (
             <>
               <button disabled={busy} onClick={() => void scan('files')}>
