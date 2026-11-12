@@ -1,9 +1,17 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron'
 import { join } from 'node:path'
-import { IPC, type ProgressQuery, type SubtitleFile } from '@private-cinema/core/shared'
+import { IPC, type MediaKind, type ProgressQuery, type SubtitleFile } from '@private-cinema/core/shared'
 import { MEDIA_SCHEME } from '@private-cinema/core/shared'
 import type { WatchProgress } from '@private-cinema/core/shared'
 import { buildLibrary, collectVideoFiles } from './library'
+import {
+  kanjuBrowse,
+  kanjuDetail,
+  kanjuEpisodes,
+  kanjuHome,
+  kanjuResolve,
+  kanjuSearch,
+} from './kanju'
 import { MediaAccessRegistry } from './media-access'
 import { handleMediaRequest } from './media-protocol'
 import { ProgressStore } from './progress'
@@ -149,6 +157,27 @@ function registerIpc(): void {
     const { setDisplayBrightness } = await import('./brightness')
     return setDisplayBrightness(id, value)
   })
+
+  // 在线片源：所有远端请求（含签名）都在主进程完成，密钥不出主进程。
+  ipcMain.handle(IPC.remoteHome, async () => kanjuHome())
+
+  ipcMain.handle(IPC.remoteBrowse, async (_event, kind: MediaKind | null, page: number) =>
+    kanjuBrowse(kind ?? null, Number(page) || 1),
+  )
+
+  ipcMain.handle(IPC.remoteSearch, async (_event, keyword: string, page: number) =>
+    kanjuSearch(String(keyword ?? ''), Number(page) || 1),
+  )
+
+  ipcMain.handle(IPC.remoteDetail, async (_event, mediaId: string) => kanjuDetail(String(mediaId)))
+
+  ipcMain.handle(IPC.remoteEpisodes, async (_event, mediaId: string) =>
+    kanjuEpisodes(String(mediaId)),
+  )
+
+  ipcMain.handle(IPC.remoteResolve, async (_event, episodeToken: string, lineId?: string) =>
+    kanjuResolve(String(episodeToken), lineId),
+  )
 }
 
 // ==================== 生命周期 ====================

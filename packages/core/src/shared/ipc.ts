@@ -2,7 +2,7 @@
 // 主进程 / 预加载 / 渲染进程三方共享的唯一接口定义。
 // 改这里 = 改协议，三端必须同步；渲染进程只通过 `window.cinema` 访问。
 
-import type { Episode, MediaItem, WatchProgress } from './types'
+import type { Episode, MediaItem, MediaKind, WatchProgress } from './types'
 
 /** 扫描结果：一部「作品」对应一个条目 + 至少一集。 */
 export interface LibraryScan {
@@ -14,6 +14,83 @@ export interface LibraryScan {
 export interface ProgressQuery {
   mediaId: string
   episodeId: string
+}
+
+// ==================== 在线片源（看剧AI / kanju）====================
+// 主进程代渲染进程请求远端并签名；渲染进程只拿到已归一化的领域数据。
+// 播放地址按集 token 现解析，所得 URL 短时有效，过期后由播放器重新解析。
+
+/** 远端片库卡片。字段已归一化为领域模型所需的最小集。 */
+export interface RemoteCard {
+  id: string
+  title: string
+  kind: MediaKind
+  year: number
+  area: string
+  genres: string[]
+  remarks: string
+  posterUrl: string
+}
+
+/** 首页聚合的一个分区（如「大家都在看」「高分电影」）。 */
+export interface RemoteSection {
+  id: string
+  title: string
+  subtitle: string
+  cards: RemoteCard[]
+}
+
+/** 首页聚合数据。 */
+export interface RemoteHomeData {
+  sections: RemoteSection[]
+}
+
+/** 分类浏览 / 搜索的一页结果。 */
+export interface RemoteBrowsePage {
+  cards: RemoteCard[]
+  page: number
+  hasMore: boolean
+}
+
+/** 远端作品详情。 */
+export interface RemoteDetail {
+  id: string
+  title: string
+  kind: MediaKind
+  year: number
+  area: string
+  genres: string[]
+  overview: string
+  posterUrl: string
+  remarks: string
+  actors: string[]
+  directors: string[]
+  episodeCount: number
+}
+
+/** 远端作品的一集（token 用于解析播放地址）。 */
+export interface RemoteEpisode {
+  id: string
+  token: string
+  number: number
+  title: string
+}
+
+/** 可用播放线路（只描述线路，不含地址）。 */
+export interface RemoteLine {
+  id: string
+  label: string
+  providerId: string
+  urlKind: 'mp4' | 'hls'
+}
+
+/** 解析后的播放结果：可直接交给 `<video>` 的地址 + 可选线路清单。 */
+export interface RemotePlayback {
+  url: string
+  urlKind: 'mp4' | 'hls'
+  lineId: string
+  lineLabel: string
+  lines: RemoteLine[]
 }
 
 /**
@@ -69,6 +146,20 @@ export interface CinemaApi {
   listDisplays(): Promise<DisplayBrightness[]>
   /** 设置某台显示器的亮度，值会被收敛到该显示器支持的范围。 */
   setBrightness(id: string, value: number): Promise<BrightnessWriteResult>
+
+  // ---------- 在线片源（看剧AI / kanju）----------
+  /** 拉取在线首页聚合（多个分区）。 */
+  remoteHome(): Promise<RemoteHomeData>
+  /** 在线分类浏览；kind 为 null 表示不限类型。 */
+  remoteBrowse(kind: MediaKind | null, page: number): Promise<RemoteBrowsePage>
+  /** 在线搜索。 */
+  remoteSearch(keyword: string, page: number): Promise<RemoteBrowsePage>
+  /** 在线作品详情。 */
+  remoteDetail(mediaId: string): Promise<RemoteDetail>
+  /** 在线作品选集列表。 */
+  remoteEpisodes(mediaId: string): Promise<RemoteEpisode[]>
+  /** 按集 token 解析出可直接播放的地址；lineId 指定线路时优先使用该线路。 */
+  remoteResolve(episodeToken: string, lineId?: string): Promise<RemotePlayback>
 }
 
 /** 字幕文件内容：文件名仅用于界面展示。 */
@@ -91,4 +182,10 @@ export const IPC = {
   removeProgress: 'progress:remove',
   listDisplays: 'brightness:list',
   setBrightness: 'brightness:set',
+  remoteHome: 'remote:home',
+  remoteBrowse: 'remote:browse',
+  remoteSearch: 'remote:search',
+  remoteDetail: 'remote:detail',
+  remoteEpisodes: 'remote:episodes',
+  remoteResolve: 'remote:resolve',
 } as const

@@ -3,12 +3,14 @@
 // 时间轴只有一个真相源：`<video>` 元素。字幕与弹幕都读它，不各自计时。
 
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import Hls from 'hls.js'
 import {
   isCompleted,
   toMediaUrl,
   type DisplayBrightness,
   type Episode,
   type MediaItem,
+  type RemoteLine,
 } from '@private-cinema/core/shared'
 import { DanmakuCanvas } from '../danmaku/DanmakuCanvas'
 import {
@@ -61,7 +63,73 @@ export function PlayerScreen({
   const [displays, setDisplays] = useState<DisplayBrightness[] | null>(null)
   const [brightnessError, setBrightnessError] = useState<string | null>(null)
 
-  const src = useMemo(() => toMediaUrl(episode.filePath), [episode.filePath])
+  // 在线片源：按集 token 现解析播放地址。null 表示自动选线。
+  const isRemote = episode.source === 'kanju' || (episode.episodeToken ?? '') !== ''
+  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null)
+  const [resolving, setResolving] = useState(false)
+  const [lines, setLines] = useState<RemoteLine[]>([])
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
+  // 远端解析出的地址类型：mp4 直接喂 <video>，hls 交给 hls.js
+  const [playbackKind, setPlaybackKind] = useState<'mp4' | 'hls' | null>(null)
+
+  useEffect(() => {
+    if (!isRemote) {
+      setResolvedSrc(null)
+      setLines([])
+      setPlaybackKind(null)
+      return
+    }
+    const token = episode.episodeToken ?? ''
+    if (token === '') {
+      setError('该集缺少解析 token，无法播放')
+      return
+    }
+    let cancelled = false
+    setResolving(true)
+    setError(null)
+    setResolvedSrc(null)
+    void window.cinema
+      .remoteResolve(token, selectedLineId ?? undefined)
+      .then((playback) => {
+        if (cancelled) return
+        setResolvedSrc(playback.url)
+        setLines(playback.lines)
+        setPlaybackKind(playback.urlKind)
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return
+        setError(`线路解析失败：${cause instanceof Error ? cause.message : String(cause)}`)
+      })
+      .finally(() => {
+        if (!cancelled) setResolving(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isRemote, episode.episodeToken, selectedLineId])
+
+  const src = isRemote ? (resolvedSrc ?? '') : toMediaUrl(episode.filePath)
+
+  // HLS：Chromium 不原生支持 m3u8，用 hls.js 走 MSE。mp4 直接由 <video src> 处理。
+  useEffect(() => {
+    const video = videoRef.current
+    if (video === null) return
+    if (src === '' || playbackKind !== 'hls') return
+    if (!Hls.isSupported()) {
+      setError('当前环境不支持 HLS 播放')
+      return
+    }
+    const hls = new Hls({ enableWorker: true })
+    hls.attachMedia(video)
+    hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(src))
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) setError(`HLS 播放失败：${data.details ?? data.type}`)
+    })
+    return () => {
+      hls.destroy()
+    }
+  }, [src, playbackKind])
+
 
   // 演示弹幕：本地片源没有弹幕服务器，按 episodeId 生成确定性分布
   const danmakuItems = useMemo(
@@ -117,6 +185,9 @@ export function PlayerScreen({
     setSubtitleName(null)
     setCurrentCue(null)
 
+    // 在线片源没有本地同名字幕，跳过文件查找。
+    if (isRemote) return
+
     void (async () => {
       const found = await window.cinema.findSubtitle(episode.filePath)
       if (cancelled || found === null) return
@@ -127,7 +198,7 @@ export function PlayerScreen({
     return () => {
       cancelled = true
     }
-  }, [episode.filePath])
+  }, [episode.filePath, isRemote])
 
   const pickSubtitle = useCallback(async () => {
     const picked = await window.cinema.pickSubtitle()
@@ -356,7 +427,12 @@ export function PlayerScreen({
   return (
     <div className="player-screen">
       <div className="player-stage">
-        <video ref={videoRef} src={src} className="player-video" onClick={togglePlay} />
+        <video
+          ref={videoRef}
+          src={playbackKind === 'hls' || src === '' ? undefined : src}
+          className="player-video"
+          onClick={togglePlay}
+        />
 
         {settings.enabled && (
           <DanmakuCanvas
@@ -378,9 +454,11 @@ export function PlayerScreen({
           </div>
         )}
 
+        {resolving && <div className="player-resolving">线路解析中…</div>}
+
         {error !== null && <div className="player-error">{error}</div>}
 
-        {!playing && error === null && (
+        {!playing && !resolving && error === null && (
           <button className="player-big-play" onClick={togglePlay} aria-label="播放">
             ▶
           </button>
@@ -392,6 +470,24 @@ export function PlayerScreen({
           <span className="player-title-main">{media.title}</span>
           <span className="player-title-sub">{episode.title}</span>
         </div>
+
+        {isRemote && lines.length > 1 && (
+          <select
+            className="player-line-select"
+            value={selectedLineId ?? 'auto'}
+            onChange={(event) =>
+              setSelectedLineId(event.target.value === 'auto' ? null : event.target.value)
+            }
+            aria-label="播放线路"
+          >
+            <option value="auto">自动线路</option>
+            {lines.map((line) => (
+              <option key={line.id} value={line.id}>
+                {line.label}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           className="player-progress"

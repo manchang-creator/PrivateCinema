@@ -25,10 +25,17 @@ export function App(): JSX.Element {
   }, [])
 
   const handlePlay = useCallback(
-    (media: MediaItem, episode: Episode, startPosition: number) => {
-      const playlist = episodes
-        .filter((item) => item.mediaId === media.id)
-        .sort((a, b) => a.seasonIndex - b.seasonIndex || a.index - b.index)
+    (
+      media: MediaItem,
+      episode: Episode,
+      startPosition: number,
+      playlistOverride?: Episode[],
+    ) => {
+      const playlist =
+        playlistOverride ??
+        episodes
+          .filter((item) => item.mediaId === media.id)
+          .sort((a, b) => a.seasonIndex - b.seasonIndex || a.index - b.index)
       setPlayback({ media, episode, playlist, startPosition })
     },
     [episodes],

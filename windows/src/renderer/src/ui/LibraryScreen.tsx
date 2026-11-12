@@ -4,15 +4,17 @@
 import { useCallback, useEffect, useState, type JSX } from 'react'
 import type { Episode, MediaItem, WatchProgress } from '@private-cinema/core/shared'
 import { formatSize, formatTime } from '@private-cinema/core/ui'
+import { OnlineLibrary } from './OnlineLibrary'
 
 interface Props {
   items: MediaItem[]
   episodes: Episode[]
   onScan: (scan: { items: MediaItem[]; episodes: Episode[] }) => void
-  onPlay: (media: MediaItem, episode: Episode, startPosition: number) => void
+  onPlay: (media: MediaItem, episode: Episode, startPosition: number, playlist?: Episode[]) => void
 }
 
 export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.Element {
+  const [tab, setTab] = useState<'local' | 'online'>('local')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<WatchProgress[]>([])
@@ -61,17 +63,37 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
     <div className="library-screen">
       <header className="library-head">
         <h1>PrivateCinema</h1>
-        <div className="library-actions">
-          <button disabled={busy} onClick={() => void scan('files')}>
-            选择视频文件
+        <div className="library-tabs">
+          <button
+            className={tab === 'local' ? 'library-tab active' : 'library-tab'}
+            onClick={() => setTab('local')}
+          >
+            本地片库
           </button>
-          <button disabled={busy} onClick={() => void scan('folder')}>
-            选择文件夹
+          <button
+            className={tab === 'online' ? 'library-tab active' : 'library-tab'}
+            onClick={() => setTab('online')}
+          >
+            在线片库
           </button>
         </div>
+        {tab === 'local' && (
+          <div className="library-actions">
+            <button disabled={busy} onClick={() => void scan('files')}>
+              选择视频文件
+            </button>
+            <button disabled={busy} onClick={() => void scan('folder')}>
+              选择文件夹
+            </button>
+          </div>
+        )}
       </header>
 
-      {error !== null && <div className="library-error">{error}</div>}
+      {tab === 'online' && <OnlineLibrary onPlay={onPlay} />}
+
+      {tab === 'local' && (
+        <>
+          {error !== null && <div className="library-error">{error}</div>}
 
       {progress.length > 0 && (
         <section className="library-section">
@@ -152,6 +174,8 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
           </div>
         )}
       </section>
+        </>
+      )}
     </div>
   )
 }

@@ -4,11 +4,20 @@ import {
   IPC,
   MEDIA_SCHEME,
   type BrightnessWriteResult,
+  type MediaKind,
   type ProgressQuery,
   type SubtitleFile,
   type WatchProgress,
 } from '@private-cinema/core/shared'
 import { buildLibrary, collectVideoFiles } from './library'
+import {
+  kanjuBrowse,
+  kanjuDetail,
+  kanjuEpisodes,
+  kanjuHome,
+  kanjuResolve,
+  kanjuSearch,
+} from './kanju'
 import { MediaAccessRegistry } from './media-access'
 import { handleMediaRequest } from './media-protocol'
 import { ProgressStore } from './progress'
@@ -154,6 +163,27 @@ function registerIpc(): void {
     const { setDisplayBrightness } = await import('./brightness')
     return setDisplayBrightness(id, value)
   })
+
+  // 在线片源：所有远端请求（含签名）都在主进程完成，密钥不出主进程。
+  ipcMain.handle(IPC.remoteHome, async () => kanjuHome())
+
+  ipcMain.handle(IPC.remoteBrowse, async (_event, kind: MediaKind | null, page: number) =>
+    kanjuBrowse(kind ?? null, Number(page) || 1),
+  )
+
+  ipcMain.handle(IPC.remoteSearch, async (_event, keyword: string, page: number) =>
+    kanjuSearch(String(keyword ?? ''), Number(page) || 1),
+  )
+
+  ipcMain.handle(IPC.remoteDetail, async (_event, mediaId: string) => kanjuDetail(String(mediaId)))
+
+  ipcMain.handle(IPC.remoteEpisodes, async (_event, mediaId: string) =>
+    kanjuEpisodes(String(mediaId)),
+  )
+
+  ipcMain.handle(IPC.remoteResolve, async (_event, episodeToken: string, lineId?: string) =>
+    kanjuResolve(String(episodeToken), lineId),
+  )
 }
 
 // ==================== 命令行自检 ====================
@@ -182,6 +212,19 @@ async function runSelfCheck(): Promise<void> {
     writeProbe.push({ id: display.id, result: await setDisplayBrightness(display.id, display.current) })
   }
 
+  // 在线片源连通性探针：失败不影响自检结论，只把原因带进报告。
+  let remote: { ok: boolean; sections?: number; sample?: string; error?: string }
+  try {
+    const home = await kanjuHome()
+    remote = {
+      ok: true,
+      sections: home.sections.length,
+      sample: home.sections[0]?.cards[0]?.title,
+    }
+  } catch (error) {
+    remote = { ok: false, error: (error as Error).message }
+  }
+
   const report = {
     platform: process.platform,
     electron: process.versions.electron,
@@ -189,6 +232,7 @@ async function runSelfCheck(): Promise<void> {
     userData: app.getPath('userData'),
     displays,
     writeProbe,
+    remote,
   }
   writeSelfCheck(`SELF_CHECK ${JSON.stringify(report, null, 2)}\n`)
 }

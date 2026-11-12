@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@private-cinema/core": "file:../packages/core",
+    "hls.js": "^1.7.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -36,18 +37,33 @@
   "build": {
     "appId": "com.privatecinema.linux",
     "productName": "PrivateCinema",
-    "directories": { "output": "release", "buildResources": "build" },
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
     "electronDownload": {
       "mirror": "https://registry.npmmirror.com/-/binary/electron/"
     },
-    "electronLanguages": ["en-US", "zh-CN"],
-    "files": ["out/**/*", "package.json"],
+    "electronLanguages": [
+      "en-US",
+      "zh-CN"
+    ],
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "executableName": "private-cinema",
       "syncDesktopName": true,
       "extraResources": [
-        { "from": "build/udev/90-private-cinema-backlight.rules", "to": "udev/90-private-cinema-backlight.rules" }
+        {
+          "from": "build/udev/90-private-cinema-backlight.rules",
+          "to": "udev/90-private-cinema-backlight.rules"
+        }
       ],
       "category": "AudioVideo",
       "icon": "build/icon.png",
@@ -63,8 +79,20 @@
       }
     },
     "deb": {
-      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0"],
-      "recommends": ["ddcutil"]
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0"
+      ],
+      "recommends": [
+        "ddcutil"
+      ]
     }
   }
 }

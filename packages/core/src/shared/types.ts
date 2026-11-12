@@ -5,6 +5,9 @@
 /** 内容类型。与 iOS `MediaKind` 对齐。 */
 export type MediaKind = 'movie' | 'series' | 'anime' | 'variety'
 
+/** 媒体来源标识：本地扫描的文件，或在线片源（如「看剧AI」）。 */
+export type MediaSourceId = 'local' | 'kanju'
+
 /** 统一的媒体条目。电影与剧集共用一个模型，用 `kind` 区分。 */
 export interface MediaItem {
   id: string
@@ -14,13 +17,21 @@ export interface MediaItem {
   genres: string[]
   durationMinutes: number
   overview: string
-  /** 本地文件路径；远端源的封面图 URL 后续再接 */
+  /** 本地文件路径；远端源为空 */
   filePath?: string
   /** 文件大小（字节）；0 表示未知，仅用于界面展示 */
   sizeBytes?: number
+  /** 来源标识；缺省视为本地 */
+  source?: MediaSourceId
+  /** 远端源封面图 URL */
+  posterUrl?: string
+  /** 更新信息 / 备注（如「更新至 16 集」） */
+  remarks?: string
+  /** 剧集总数；0 或未提供表示未知 */
+  episodeCount?: number
 }
 
-/** 单集。MVP 阶段本地文件一文件一集。 */
+/** 单集。本地源一文件一集；远端源靠 `episodeToken` 现解析播地址。 */
 export interface Episode {
   id: string
   mediaId: string
@@ -30,7 +41,12 @@ export interface Episode {
   title: string
   /** 秒；0 表示未知（以视频实际时长为准） */
   duration: number
+  /** 本地文件路径；远端源为空字符串 */
   filePath: string
+  /** 来源标识；缺省视为本地 */
+  source?: MediaSourceId
+  /** 远端源解析播放所需的集 token（本地源为空） */
+  episodeToken?: string
 }
 
 /** 播放线路描述：只说明「有哪些线路」，不含地址。 */
