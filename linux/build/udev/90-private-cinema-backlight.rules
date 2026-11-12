@@ -1,0 +1,10 @@
+# 背光亮度免密（PrivateCinema）
+# 安装位置：/usr/lib/udev/rules.d/
+# 生效：sudo udevadm control --reload-rules && sudo udevadm trigger --action=change --subsystem-match=backlight
+#
+# 为什么需要：sysfs 的 `brightness` 节点归 root 所有，应用直接写会得到 EACCES。
+# 这里只放开「亮度」与「只读刻度」，不动 bl_power（DPMS），避免顺带给出关屏权限。
+
+ACTION=="add|change", SUBSYSTEM=="backlight", KERNEL=="*", \
+  RUN+="/bin/chgrp video /sys/class/backlight/%k/brightness", \
+  RUN+="/bin/chmod 0664 /sys/class/backlight/%k/brightness"

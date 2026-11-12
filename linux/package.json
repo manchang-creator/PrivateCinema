@@ -1,0 +1,70 @@
+{
+  "name": "private-cinema-linux",
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "private": true,
+  "description": "PrivateCinema Linux 客户端（Electron + React + TypeScript）",
+  "author": "manchang-creator",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dist": "electron-vite build && electron-builder --linux --publish never",
+    "dist:dir": "electron-vite build && electron-builder --linux --dir --publish never"
+  },
+  "dependencies": {
+    "@private-cinema/core": "file:../packages/core",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "~39.8.10",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
+  },
+  "build": {
+    "appId": "com.privatecinema.linux",
+    "productName": "PrivateCinema",
+    "directories": { "output": "release", "buildResources": "build" },
+    "electronDownload": {
+      "mirror": "https://registry.npmmirror.com/-/binary/electron/"
+    },
+    "electronLanguages": ["en-US", "zh-CN"],
+    "files": ["out/**/*", "package.json"],
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "executableName": "private-cinema",
+      "syncDesktopName": true,
+      "extraResources": [
+        { "from": "build/udev/90-private-cinema-backlight.rules", "to": "udev/90-private-cinema-backlight.rules" }
+      ],
+      "category": "AudioVideo",
+      "icon": "build/icon.png",
+      "synopsis": "私人影院",
+      "description": "本地视频播放器：支持弹幕、外挂字幕、续播与显示器亮度调节。",
+      "desktop": {
+        "entry": {
+          "Name": "PrivateCinema",
+          "Comment": "私人影院",
+          "Categories": "AudioVideo;Player;",
+          "StartupWMClass": "PrivateCinema"
+        }
+      }
+    },
+    "deb": {
+      "depends": ["libgtk-3-0", "libnotify4", "libnss3", "libxss1", "libxtst6", "xdg-utils", "libatspi2.0-0", "libuuid1", "libsecret-1-0"],
+      "recommends": ["ddcutil"]
+    }
+  }
+}
