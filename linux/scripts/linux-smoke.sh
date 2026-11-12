@@ -97,6 +97,20 @@ if [ -x "$APP_BIN" ]; then
   else
     info '本机无 xvfb-run，跳过启动冒烟（sudo apt install xvfb）'
   fi
+
+  # 主进程自检：走与界面相同的 IPC 路径枚举显示器，并对可用显示器做一次
+  # 「读当前值写回原值」的往返（不改变实际亮度）。窗口交互无法测，这条能测的部分在这里测。
+  if timeout 30 "$APP_BIN" --no-sandbox --disable-gpu --self-check > /tmp/private-cinema-selfcheck.json 2>/dev/null; then
+    pass '主进程自检 --self-check 正常退出'
+    if grep -q 'SELF_CHECK' /tmp/private-cinema-selfcheck.json; then
+      pass '自检输出有效（/tmp/private-cinema-selfcheck.json）'
+      grep -o '"reason": "[^"]*"' /tmp/private-cinema-selfcheck.json | sed 's/^/  info  写入失败原因：/'
+    else
+      fail_check '自检输出缺少 SELF_CHECK 标记'
+    fi
+  else
+    fail_check '主进程自检失败（超时或非零退出），见 /tmp/private-cinema-selfcheck.json'
+  fi
 else
   info '未构建，跳过启动冒烟'
 fi
