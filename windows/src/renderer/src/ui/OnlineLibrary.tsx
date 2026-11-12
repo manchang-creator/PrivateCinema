@@ -185,6 +185,10 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
         ) : (
           <span className="remote-poster-fallback">{card.title.slice(0, 1)}</span>
         )}
+        <span className="remote-poster-scrim" aria-hidden="true" />
+        <span className="remote-poster-play" aria-hidden="true">
+          ▶
+        </span>
         {card.remarks !== '' && <span className="remote-badge">{card.remarks}</span>}
       </div>
       <div className="remote-card-title">{card.title}</div>
@@ -195,13 +199,17 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
     </button>
   )
 
+  const firstEpisode = episodes[0]
+
   return (
     <div className="online-library">
       <div className="online-toolbar">
-        <div className="online-kinds">
+        <div className="online-kinds" role="tablist" aria-label="分类">
           {KIND_TABS.map((tab) => (
             <button
               key={tab.label}
+              role="tab"
+              aria-selected={kind === tab.key && mode !== 'home'}
               className={kind === tab.key && mode !== 'home' ? 'online-kind active' : 'online-kind'}
               onClick={() => chooseKind(tab.key)}
             >
@@ -221,11 +229,11 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
             placeholder="搜索电影 / 电视剧 / 动漫 / 综艺"
             onChange={(event) => setKeyword(event.target.value)}
           />
-          <button type="submit" disabled={loading}>
+          <button type="submit" className="btn-primary" disabled={loading}>
             搜索
           </button>
-          <button type="button" disabled={loading} onClick={() => void loadHome()}>
-            刷新首页
+          <button type="button" className="btn-ghost" disabled={loading} onClick={() => void loadHome()}>
+            刷新
           </button>
         </form>
       </div>
@@ -270,10 +278,17 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
 
       {active !== null && (
         <div className="remote-modal-mask" onClick={() => setActive(null)}>
-          <div className="remote-modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="remote-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="remote-modal-head">
               <span className="remote-modal-title">{detail?.title ?? active.title}</span>
-              <button onClick={() => setActive(null)}>关闭</button>
+              <button className="remote-modal-close" aria-label="关闭" onClick={() => setActive(null)}>
+                ×
+              </button>
             </div>
 
             <div className="remote-modal-body">
@@ -310,6 +325,14 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
                 {detail !== null && detail.actors.length > 0 && (
                   <p className="remote-modal-cast">演员：{detail.actors.slice(0, 8).join(' / ')}</p>
                 )}
+                {firstEpisode !== undefined && (
+                  <button
+                    className="btn-primary remote-modal-play"
+                    onClick={() => playEpisode(firstEpisode)}
+                  >
+                    ▶ 播放第 1 集
+                  </button>
+                )}
               </div>
             </div>
 
@@ -317,17 +340,22 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
             {detailLoading && <div className="online-loading">选集加载中…</div>}
 
             {episodes.length > 0 && (
-              <div className="remote-episodes">
-                {episodes.map((episode) => (
-                  <button
-                    key={episode.id}
-                    className="episode-button"
-                    onClick={() => playEpisode(episode)}
-                  >
-                    {episode.title}
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="remote-episodes-head">
+                  选集 <span>共 {episodes.length} 集</span>
+                </div>
+                <div className="remote-episodes">
+                  {episodes.map((episode) => (
+                    <button
+                      key={episode.id}
+                      className="episode-button"
+                      onClick={() => playEpisode(episode)}
+                    >
+                      {episode.title}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
