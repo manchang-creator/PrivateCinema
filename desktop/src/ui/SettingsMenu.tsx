@@ -14,6 +14,16 @@ function errMsg(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
 }
 
+// 更新检查最常见的「假报错」：最新 Release 没附 update-*.json 清单时，GitHub 返回 404。
+// 这不是应用故障，只是没有可用的在线更新源；转成一句人能看懂的提示，别把 GET…404 原样甩出来。
+function friendlyUpdateError(reason: unknown): string {
+  const msg = errMsg(reason)
+  if (/404|\bnot found\b/i.test(msg)) {
+    return '暂时无法在线更新：最新发布未附更新清单（可到 GitHub Releases 手动下载最新版）。'
+  }
+  return msg
+}
+
 export function SettingsMenu(): JSX.Element {
   const [open, setOpen] = useState(false)
   const [info, setInfo] = useState<AppInfo | null>(null)
@@ -76,7 +86,7 @@ export function SettingsMenu(): JSX.Element {
       }
     } catch (reason) {
       setPhase('error')
-      setMessage(errMsg(reason))
+      setMessage(friendlyUpdateError(reason))
     }
   }, [])
 
@@ -90,7 +100,7 @@ export function SettingsMenu(): JSX.Element {
       await window.cinema.restartApp()
     } catch (reason) {
       setPhase('error')
-      setMessage(errMsg(reason))
+      setMessage(friendlyUpdateError(reason))
     }
   }, [])
 
