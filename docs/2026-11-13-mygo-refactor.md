@@ -276,3 +276,28 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 - `bash desktop/scripts/local-e2e.sh` → `[PASS]`
 - 截图：`docs/ui-redesign/v2-{local,detail,online,hongguo,light,rails,continue,continue-remove,after-remove}.png`（e2e 播种真机 1280×800）；`v2-narrow-560.png`（560px 无头 Chrome 渲染同一份 `dist` CSS，验证 P3 封面铺底）。
 - 交互回归：`RemoveProgress` 端到端实测 —— 播放 → 返回生成继续观看 → 点 `×` 后 `ListProgress` 长度归零、继续观看分区消失；在线大卡区 7s 内 `scrollLeft` 由 0 自动前进到 ~1120。
+
+## 12. 红果播放修复：openhongguo 升级到含 Argus/Ladon 签名的提交（2026-11-13）
+
+**现象**：红果短剧的首页 / 搜索 / 详情 / 分集都正常，唯独 `ResolvePlayback` 返回空，界面报「红果匿名播放额度暂时用尽（上游限制），请稍后重试」，换设备重试也无效。
+
+**根因**：2026-11-10 起红果开始对播放接口 `POST /novel/player/video_model/v1/` 真正校验 `x-argus` / `x-ladon`。我们锁定的 `openhongguo v0.2.0` 这两个头只是时间戳占位，于是播放接口返回 `HTTP 200 + 空 body`，SDK 把它归为 `ErrAnonymousLimited`（误报“额度用尽”）。上游 issue #2 / #6，PR #7（2026-11-11 合并）补上真正的 **Argus 551 信封 + 34 轮 Ladon 签名**，并去掉播放请求里的 `x-medusa`，其余接口签名不动。搜索/详情未加这道校验，所以一直正常——与现象吻合。
+
+**处理**：`desktop/go.mod` 将 `github.com/beilunyang/openhongguo` 由 `v0.2.0` 升到含该修复的提交
+`v0.2.1-0.20261111115741-4bc88830eba1`（= PR #7 合并提交 `4bc88830e`）。该修复尚未打新 tag，故用伪版本锁定。
+
+**验证（真实联网）**：
+- `remoteResolve` 返回本地解密 mp4（`urlKind=mp4`，5 条线路，解密约 5.8s）；
+- UI 端到端播放《初尝玫瑰!》第 1 集，`video.duration ≈ 153s` 且出画面；
+- 首页（推荐/热搜榜/预约榜）、搜索「总裁」6 条、详情 95 集、选集均正常。
+- `mygo-smoke.sh` 与 `local-e2e.sh` 均 `[PASS]`。
+
+**遗留**：红果匿名额度本身仍可能有「每设备/每 IP」上限（`retry.go` 的换设备/退避逻辑保留）；本修复解决的是“播放请求被签名校验判空”这一确定性问题。另：卡片封面图在当前环境多为占位（`posterUrl` 有映射但 CDN 图未加载），属独立小问题。
+
+### 12.1 同类开源项目（调研）
+
+- `beilunyang/openhongguo`（≈458★，Go，多语言绑定 + ohg CLI）：本项目所用 SDK，社区最活跃，PR #7 即此修复来源。
+- `aston314/hongguo-tv-releases`（≈1124★）：红果短剧多平台播放器（Android TV/webOS/Mac/Win/Linux）。
+- `kiroswu/hongguo-shortdramabox`（≈313★）/ `liangzai-kk/hongguo-short-drama-desktop`（≈243★）/ `StriveToLearnCode/hongguo-short-drama-macos`（≈63★）：第三方桌面端；macOS 版支持账号登录（登录态可绕开匿名额度）。
+- `parallelpan/hongguo-downloader`（≈538★）、`M4St3r0/hongguo-downloader`、`wbkboy/hongguo-video-downloader-pro`：解析/下载类（服务端或多出口 IP 轮换 + CENC-AES-128-CTR 解密）。
+结论：无需“逆向破解”第三方客户端；直接用维护中的官方非官方 SDK 升级即可，签名实现为其 clean-room 版本（Apache-2.0）。
