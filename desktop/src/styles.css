@@ -684,7 +684,7 @@ select {
 
 .cw-card {
   flex: none;
-  width: 244px;
+  width: 220px;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -693,6 +693,16 @@ select {
   background: transparent;
   text-align: left;
   border-radius: 14px;
+}
+/* 继续观看分档：最近在看放大卡，其余标准卡 */
+.cw-card.cw-card-lg {
+  width: 320px;
+}
+.cw-card.cw-card-lg .cw-cover-art {
+  font-size: 54px;
+}
+.cw-card.cw-card-lg .cw-title {
+  font-size: 15px;
 }
 .cw-cover {
   position: relative;
@@ -873,6 +883,14 @@ select {
 .rail-wrap:focus-within .rail-nav,
 .rail-nav:focus-visible {
   opacity: 1;
+}
+/* 大卡区常显翻页按钮：到两端时置灰 */
+.rail-wrap.nav-always .rail-nav {
+  opacity: 1;
+}
+.rail-nav:disabled {
+  opacity: 0.28;
+  cursor: default;
 }
 .rail-nav:hover:not(:disabled) {
   background: var(--glass-hover);

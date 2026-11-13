@@ -343,7 +343,7 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
                     <span className="section-en">Continue Watching</span>
                   </div>
                   <Rail>
-                    {continueRecords.map((record) => {
+                    {continueRecords.map((record, index) => {
                       const media = items.find((item) => item.id === record.mediaId)
                       const episode = episodes.find((item) => item.id === record.episodeId)
                       const pct = percentOf(record.position, record.duration)
@@ -351,7 +351,7 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
                       return (
                         <button
                           key={`${record.mediaId}:${record.episodeId}`}
-                          className="cw-card"
+                          className={index === 0 ? 'cw-card cw-card-lg' : 'cw-card'}
                           disabled={media === undefined || episode === undefined}
                           onClick={() => {
                             if (media !== undefined && episode !== undefined) {

@@ -16,21 +16,27 @@ import { Icon } from './icons'
 interface Props {
   children: ReactNode
   className?: string
+  /** 常显左右翻页按钮（大卡区用），到两端时对应按钮置灰 */
+  alwaysNav?: boolean
 }
 
-export function Rail({ children, className }: Props): JSX.Element {
+export function Rail({ children, className, alwaysNav }: Props): JSX.Element {
   const scroller = useRef<HTMLDivElement>(null)
-  const [reach, setReach] = useState({ left: false, right: false })
+  const [reach, setReach] = useState({ left: false, right: false, overflow: false })
 
   const sync = useCallback(() => {
     const el = scroller.current
     if (el === null) return
     const max = el.scrollWidth - el.clientWidth
     if (max <= 1) {
-      setReach({ left: false, right: false })
+      setReach({ left: false, right: false, overflow: false })
       return
     }
-    setReach({ left: el.scrollLeft > 2, right: el.scrollLeft < max - 2 })
+    setReach({
+      left: el.scrollLeft > 2,
+      right: el.scrollLeft < max - 2,
+      overflow: true,
+    })
   }, [])
 
   useEffect(() => {
@@ -80,9 +86,11 @@ export function Rail({ children, className }: Props): JSX.Element {
   )
 
   const fadeClass = `${reach.left ? ' fade-left' : ''}${reach.right ? ' fade-right' : ''}`
+  const showPrev = alwaysNav ? reach.overflow : reach.left
+  const showNext = alwaysNav ? reach.overflow : reach.right
 
   return (
-    <div className="rail-wrap">
+    <div className={alwaysNav ? 'rail-wrap nav-always' : 'rail-wrap'}>
       <div
         className={`rail${fadeClass}${className !== undefined ? ` ${className}` : ''}`}
         ref={scroller}
@@ -91,21 +99,23 @@ export function Rail({ children, className }: Props): JSX.Element {
       >
         {children}
       </div>
-      {reach.left && (
+      {showPrev && (
         <button
           type="button"
           className="rail-nav rail-nav-prev"
           aria-label="向左浏览"
+          disabled={!reach.left}
           onClick={() => page(-1)}
         >
           <Icon name="chevron-left" size={20} />
         </button>
       )}
-      {reach.right && (
+      {showNext && (
         <button
           type="button"
           className="rail-nav rail-nav-next"
           aria-label="向右浏览"
+          disabled={!reach.right}
           onClick={() => page(1)}
         >
           <Icon name="chevron-right" size={20} />
