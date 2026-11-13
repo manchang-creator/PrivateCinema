@@ -1,0 +1,103 @@
+name: release-desktop
+
+# 打 v* tag 时自动构建桌面端安装包并发 Release；也可在 Actions 页手动触发。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 v0.1.1）。留空则使用当前 ref。'
+        required: false
+
+# softprops/action-gh-release 建 Release / 传附件需要 contents: write
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # go.mod 要求 go 1.27.3；setup-go 装 stable 后，由 go 自动下载所需工具链
+      GOTOOLCHAIN: auto
+      GOFLAGS: -buildvcs=false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+          cache-dependency-path: desktop/go.sum
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install packaging deps (NSIS / rpm)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis rpm fakeroot zip
+
+      - name: Install frontend deps
+        working-directory: desktop
+        run: bun install
+
+      - name: Resolve version
+        id: ver
+        run: |
+          V="${{ github.event.inputs.version }}"
+          if [ -z "$V" ]; then V="${GITHUB_REF_NAME}"; fi
+          V="${V#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          echo "resolved: version=$V tag=v$V"
+
+      - name: Sync app version from tag
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          sed -i -E "s/(version:[[:space:]]*\")[^\"]+(\")/\1${V}\2/" desktop/mygo.config.ts
+          grep -n 'version' desktop/mygo.config.ts
+
+      - name: Build Linux + Windows packages
+        working-directory: desktop
+        run: go run github.com/egoist/mygo/cmd/mygo@v0.9.0 build -platform linux/amd64,windows/amd64
+
+      - name: Package Windows portable zip + checksums
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          ( cd desktop/build/windows-amd64 && zip -q -9 "private-cinema-${V}-windows-amd64-portable.zip" "私人影院.exe" )
+          ( cd desktop/build && sha256sum linux-amd64/*.deb linux-amd64/*.rpm linux-amd64/*.tar.gz windows-amd64/*.exe windows-amd64/*.zip > SHA256SUMS )
+          echo '--- build dir ---'
+          ls -lh desktop/build/linux-amd64 desktop/build/windows-amd64
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: PrivateCinema ${{ steps.ver.outputs.tag }}
+          draft: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            desktop/build/linux-amd64/*.deb
+            desktop/build/linux-amd64/*.rpm
+            desktop/build/linux-amd64/*.tar.gz
+            desktop/build/windows-amd64/*setup*.exe
+            desktop/build/windows-amd64/*portable*.zip
+            desktop/build/SHA256SUMS
+
+      - name: Upload build artifacts (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: privatecinema-desktop-${{ steps.ver.outputs.version }}
+          path: |
+            desktop/build/linux-amd64/*
+            desktop/build/windows-amd64/*
+            desktop/build/SHA256SUMS

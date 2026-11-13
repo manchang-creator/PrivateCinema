@@ -314,3 +314,15 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 **验证**：`hero_img_loaded=true`，网格封面 `20/20` 成功加载（此前 `0/19`）；首页 Hero 与详情封面均显示真实海报。单测新增 `TestPosterRejectsUnlistedHost` / `TestPosterServesCachedJPEG` / `TestAllowedPosterHost`，`go test ./...` 通过；`mygo-smoke` 与 `local-e2e` 均 `[PASS]`。
 
 **已知遗留**：**搜索结果列表**的卡片封面仍为占位——上游 SDK 的搜索解析器（`ParseSearchTab` 的 `video_detail` 主分支）没有把 `cover` 拷进 `SeriesSummary`（`video_detail` 的 `cards` 分支才有）。首页/详情不受影响。可选后续：给 `openhongguo` 提 PR 补该字段，或前端按需用详情补图（会额外耗额度，暂不做）。
+
+## 13. 自动构建与发布（GitHub Actions）
+
+新增 `.github/workflows/release-desktop.yml`：**打 `v*` tag（或 Actions 手动触发）即自动出包并发 Release**。
+
+- Runner：`ubuntu-latest`；装 Go(stable，`GOTOOLCHAIN=auto` 拉 go1.27.3) + Bun + `nsis rpm fakeroot zip`。
+- 构建：`go run github.com/egoist/mygo/cmd/mygo@v0.9.0 build -platform linux/amd64,windows/amd64`（产出 `.deb/.rpm/.tar.gz` + `private-cinema-setup-<ver>-amd64.exe`）。
+- 打包：Windows 便携 `private-cinema-<ver>-windows-amd64-portable.zip` + `SHA256SUMS`。
+- 发布：`softprops/action-gh-release@v2` 把 deb/rpm/tar.gz/setup.exe/portable.zip/SHA256SUMS 挂到对应 tag 的 Release；另 `upload-artifact` 备份。
+- 版本号：从 tag 自动写入 `mygo.config.ts` 的 `version`（`v0.1.1` → `0.1.1`）。
+- 用法：`git tag v0.1.1 && git push origin v0.1.1`。
+- 前提：仓库 Actions 已启用；`permissions: contents: write`（工作流内已声明）。
