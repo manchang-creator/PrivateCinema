@@ -9,12 +9,18 @@ package main
 //   windows/ 与 linux/ 两套壳   →  合并为这一套（mygo 纯 Go，跨平台构建）
 
 import (
+	_ "embed"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/egoist/mygo"
 )
+
+// 应用图标：打包时内嵌，运行时再用 SetIcon 设成窗口图标（标题栏 + 任务栏/停靠栏）。
+//
+//go:embed resources/icon.png
+var appIcon []byte
 
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -50,7 +56,7 @@ func main() {
 		configureUpdate(userData)
 
 		// 3) 主窗口。
-		mygo.NewWindow(mygo.WindowOptions{
+		win := mygo.NewWindow(mygo.WindowOptions{
 			Title:           "私人影院",
 			URL:             "/",
 			Width:           1280,
@@ -61,6 +67,10 @@ func main() {
 			AutoHideMenuBar: true,
 			StateKey:        "main",
 		})
+		// 窗口自己的图标（GTK 的 _NET_WM_ICON → 标题栏/任务栏），避免显示成通用空白图标。
+		if err := win.SetIcon(appIcon); err != nil {
+			log.Printf("设置窗口图标失败: %v", err)
+		}
 
 		// 4) 启动后按偏好做一次静默自动更新检查（仅正式构建生效）。
 		go autoUpdateOnStart()

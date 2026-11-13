@@ -315,6 +315,36 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 
 **已知遗留**：**搜索结果列表**的卡片封面仍为占位——上游 SDK 的搜索解析器（`ParseSearchTab` 的 `video_detail` 主分支）没有把 `cover` 拷进 `SeriesSummary`（`video_detail` 的 `cards` 分支才有）。首页/详情不受影响。可选后续：给 `openhongguo` 提 PR 补该字段，或前端按需用详情补图（会额外耗额度，暂不做）。
 
+### 12.3 详情弹层浅色主题对比度修复（2026-11-13）
+
+**现象**：浅色主题下打开在线（红果）/本地详情弹层，简介与「选集」按钮几乎看不清——深色渐变底 + 深色文字。
+
+**根因**：`palette.ts` 的 `backdropGradient()` 直接返回一段**深色** `background` 作为内联样式，内联优先级高于 `:root[data-theme='light'] .detail-modal { background:#f6f7fa }`，于是浅色主题下弹层仍是深底；而文字沿用 `--text-*` 主题变量，在浅色主题下是深色 → 深底深字。
+
+**修复**：
+- `backdropGradient()` 改为只下发 `--detail-hue` / `--detail-hue-2` 两个色相变量，不再写死背景。
+- CSS：`.detail-modal` 用变量定义深色渐变默认值；`:root[data-theme='light'] .detail-modal` 定义同色相的浅色渐变（原 `#f6f7fa` 平底升级为同色相径向渐变）。
+- 深浅主题共用同一套 `--text-*` 变量，天然自适应，无需再按主题硬编码文字色。
+
+**验证**：浅色详情弹层实测 `detail-summary` 为 `rgba(20,22,28,0.68)`（深字）+ 浅底，选集网格可读；深色主题回归正常；`mygo-smoke` `[PASS]`。截图见 [docs/fix-2026-11-13/](fix-2026-11-13/)。
+
+### 12.4 配色统一 + 应用图标（2026-11-13）
+
+**现象**：浅色主题整页偏粉/紫，Hero 又随轮播在绿/蓝/粉间跳，配色不协调；窗口/任务栏没有应用图标。
+
+**配色**：
+- `palette.ts` 新增 `coolHue()`，把所有大面积底色（整页环境光 / 无海报封面 / 详情弹层）的色相收进冷色窄区间（≈214°–260°），轮播换片也只在很小的色温范围微动。
+- `ambientVars()` 环境光降饱和、降透明（0.55→0.30 量级），不再整屏泛色。
+- 浅色主题：`--bg` 改中性灰 `#f2f3f6`，`.ambient` 改低饱和冷光，`.hero` 改低饱和同色相浅渐变，`.detail-modal` 浅底改低饱和近白渐变。
+- 深色主题：Hero 底色降饱和，`::before` 环境光透明度 0.9→0.62，整体更沉。
+- 细节：新增统一 `:focus-visible` 焦点环；分区间距/标题字号微调（`section-title` 19px）。
+
+**图标**：
+- 新增 `resources/icon.png`（1024×1024，深墨色圆角方块 + 斜置胶片条 + 白色播放键，柔和投影；SVG 经 Inkscape 渲染，小尺寸仍清晰），在 `mygo.config.ts` 用 `icon` 接入打包（deb/rpm 与桌面入口都带图标）。
+- `main.go` 用 `//go:embed resources/icon.png` 内嵌，并在建窗后 `win.SetIcon(appIcon)` 设窗口图标（GTK → WM_HINTS，标题栏/任务栏可见）。
+
+**验证**：`mygo-smoke` `[PASS]`；窗口 `WM_HINTS` 已带 icon pixmap；浅/深主题与详情截图见 [docs/fix-2026-11-13/ui-*.png](fix-2026-11-13/)。
+
 ## 13. 自动构建与发布（GitHub Actions）
 
 新增 `.github/workflows/release-desktop.yml`：**打 `v*` tag（或 Actions 手动触发）即自动出包并发 Release**。

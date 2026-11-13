@@ -12,6 +12,8 @@ export default defineConfig({
   frontendDist: "dist",
   bindings: "src/mygo.ts",
   out: "build",
+  // 应用图标（正方形 1024）：打包进桌面入口、任务栏/窗口图标与 deb/rpm。
+  icon: "resources/icon.png",
   // 签名更新：mygo.Updater 用这个公钥校验更新包。私钥（mygo-update.key）不入库，
   // 放在发布机的 ~/.config/mygo/update-keys/ 或 CI 的 MYGO_UPDATER_PRIVATE_KEY。
   // `mygo build` 会按 github 的 release 约定产出并（加 -upload 时）上传签名更新。
