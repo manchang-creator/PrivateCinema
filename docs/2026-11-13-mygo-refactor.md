@@ -165,3 +165,38 @@ mygo build -platform linux/amd64   → OK（单二进制 + deb/rpm/tar.gz）
 
 结论：阶段二的 kanju / hongguo / Windows 亮度均已落地；本地链路 + 在线 kanju 全链路已联网验证；
 hongguo 的解析受上游匿名额度限制（换真实设备/时段可解），其余无代码阻塞。
+
+---
+
+## 8. 红果匿名额度：设备轮换 + 重试（增强）
+
+红果对「每台匿名设备」大约只给一次播放模型；`ResolvePlayback` 用尽后返回空，SDK 抛 `ErrAnonymousLimited`。
+
+新增 `desktop/retry.go`：
+
+- 对红果的 home/browse/search/detail/episodes/resolve 统一套 `withQuotaRetry`；
+- 命中「匿名额度 / 限流 / 设备被拒」类错误时，先指数退避（默认 800ms 起，翻倍封顶 8s），
+  再 `client.ResetDevice()` 强制换一台匿名设备，重跑整次调用；
+- 次数与退避可配：`HONGGUO_MAX_ROTATIONS`（默认 2）、`HONGGUO_ROTATE_DELAY_MS`（默认 800）、
+  `HONGGUO_DEVICE_RESETS`（SDK 内部换设备次数，默认 3）、`HONGGUO_RETRY_ATTEMPTS`（默认 2）；
+- `hongguoResolve` 的错误改为 `friendlyError`（保留中文消息 + `Unwrap` 原错误链），
+  否则外层拿不到 `sdk.ErrAnonymousLimited` 这个哨兵、无法触发轮换。
+
+实测（本机）：轮换确实触发（调用耗时从 ~3.4s 拉长到 ~10s，含换设备与退避），
+但解析仍返回「匿名额度用尽」——说明该限制是**按 IP/地区**而非仅按设备，换设备在本机无法绕过。
+结论：轮换/重试逻辑已就位并可配置，能否成功取决于上游是否按设备计数；不会造成假成功。
+
+## 9. MKV：外部播放器兜底
+
+WebView（WebKitGTK/WebView2）受容器/编码白名单限制，MKV 常 `MEDIA_ERR_SRC_NOT_SUPPORTED`。
+新增 `desktop/external_player.go` 绑定 `Cinema.PlayExternal(filePath)`：
+
+- 仅放行用户本进程选择过（已授权）的文件，与本地媒体协议同一安全边界；
+- 播放器选择顺序：`PRIVATE_CINEMA_PLAYER` 环境变量（可带参数）> `mpv` > `vlc` > `celluloid` > `totem` > `xdg-open`；
+- `exec.Start()` 后后台 `Wait()` 回收，不阻塞 UI。
+
+前端 `PlayerScreen`：本地播放时新增「外部播放」按钮；`<video>` 报错文案提示「可点『外部播放』用系统播放器打开」。
+`@private-cinema/core` 的 `CinemaApi` 增加可选 `playExternal`，bridge 已接线；生成的 `src/mygo.ts` 含 `Cinema.playExternal`。
+
+> WebCodecs 方案需要自带 MKV 解封装 + 视频/音频 WebCodecs 解码 + 字幕/弹幕时间轴对齐，
+> 工作量远大于外部播放器兜底，暂不做；外部播放器已能覆盖 MKV 的实际使用需求。
