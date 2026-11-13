@@ -435,8 +435,12 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
                 <h2 className="section-title">{section.title}</h2>
                 {section.subtitle !== '' && <span className="section-en">{section.subtitle}</span>}
               </div>
-              {/* P2 货架分档：首个热门区用大卡 + 常显翻页按钮，其余用标准卡 */}
-              <Rail className={index === 0 ? 'rail-lg' : undefined} alwaysNav={index === 0}>
+              {/* P2 货架分档：首个热门区用大卡 + 常显翻页 + 自动轮播，其余用标准卡 */}
+              <Rail
+                className={index === 0 ? 'rail-lg' : undefined}
+                alwaysNav={index === 0}
+                autoPlayMs={index === 0 ? 6000 : undefined}
+              >
                 {section.cards.map(renderCard)}
               </Rail>
             </section>

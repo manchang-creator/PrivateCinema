@@ -18,9 +18,11 @@ interface Props {
   className?: string
   /** 常显左右翻页按钮（大卡区用），到两端时对应按钮置灰 */
   alwaysNav?: boolean
+  /** 自动轮播间隔（毫秒）。到末尾回环到起点，鼠标悬浮时暂停。大卡区用 */
+  autoPlayMs?: number
 }
 
-export function Rail({ children, className, alwaysNav }: Props): JSX.Element {
+export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX.Element {
   const scroller = useRef<HTMLDivElement>(null)
   const [reach, setReach] = useState({ left: false, right: false, overflow: false })
 
@@ -38,6 +40,24 @@ export function Rail({ children, className, alwaysNav }: Props): JSX.Element {
       overflow: true,
     })
   }, [])
+
+  // 自动轮播：按屏宽 0.9 翻页，到末尾回环；悬浮 / 聚焦时暂停，不抢用户操作
+  useEffect(() => {
+    if (autoPlayMs === undefined || autoPlayMs <= 0) return
+    const el = scroller.current
+    if (el === null) return
+    const timer = setInterval(() => {
+      if (el.matches(':hover') || el.contains(document.activeElement)) return
+      const max = el.scrollWidth - el.clientWidth
+      if (max <= 1) return
+      if (el.scrollLeft >= max - 2) {
+        el.scrollTo({ left: 0, behavior: 'smooth' })
+      } else {
+        el.scrollBy({ left: el.clientWidth * 0.9, behavior: 'smooth' })
+      }
+    }, autoPlayMs)
+    return () => clearInterval(timer)
+  }, [autoPlayMs])
 
   useEffect(() => {
     sync()

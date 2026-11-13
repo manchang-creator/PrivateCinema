@@ -683,8 +683,14 @@ select {
 /* ==================== 继续观看 ==================== */
 
 .cw-card {
+  position: relative;
   flex: none;
   width: 220px;
+  border-radius: 14px;
+}
+/* 主体是按钮（封面 + 标题 + 元信息），移除按钮叠在右上角 */
+.cw-main {
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -693,6 +699,40 @@ select {
   background: transparent;
   text-align: left;
   border-radius: 14px;
+}
+.cw-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(10, 10, 14, 0.62);
+  border: 1px solid var(--hairline-strong);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease,
+    background 0.16s ease;
+}
+.cw-card:hover .cw-remove,
+.cw-card:focus-within .cw-remove,
+.cw-remove:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+.cw-remove:hover {
+  background: rgba(220, 80, 80, 0.9);
+  border-color: transparent;
 }
 /* 继续观看分档：最近在看放大卡，其余标准卡 */
 .cw-card.cw-card-lg {

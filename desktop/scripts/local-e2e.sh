@@ -188,8 +188,8 @@ poll_num "window.__p||0" gt 40 "progress.position(s)"
 A screenshot "$OUT_DIR/3-library-continue.png" >/dev/null || fail "截图失败(继续观看)"
 ok "截图: $OUT_DIR/3-library-continue.png"
 
-# 点击「继续观看」卡片 → 应从 42s 恢复
-js "(()=>{const c=document.querySelector('.cw-card'); if(!c) return 'no-card'; c.click(); return 'clicked';})()" | grep -q clicked || fail "未找到继续观看卡片"
+# 点击「继续观看」卡片主体（.cw-main 是播放按钮，.cw-card 是含移除按钮的容器）→ 应从 42s 恢复
+js "(()=>{const c=document.querySelector('.cw-main'); if(!c) return 'no-card'; c.click(); return 'clicked';})()" | grep -q clicked || fail "未找到继续观看卡片"
 poll_num "document.querySelector('.player-video')?.duration || 0" gt 60 "恢复后 duration(s)"
 sleep 1
 poll_num "document.querySelector('.player-video')?.currentTime || 0" gt 40 "续播起点 currentTime(s)"

@@ -99,6 +99,22 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
     [onPlay, progress],
   )
 
+  // 移除某条播放记录：后端删除后刷新列表
+  const removeRecord = useCallback(
+    async (record: WatchProgress) => {
+      try {
+        await window.cinema.removeProgress({
+          mediaId: record.mediaId,
+          episodeId: record.episodeId,
+        })
+        await refreshProgress()
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : '移除记录失败')
+      }
+    },
+    [refreshProgress],
+  )
+
   // ==================== 主推 Hero（轮播，P2） ====================
   const [heroIndex, setHeroIndex] = useState(0)
   const safeHeroIndex = items.length === 0 ? 0 : heroIndex % items.length
@@ -349,34 +365,49 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
                       const pct = percentOf(record.position, record.duration)
                       const remaining = Math.max(0, record.duration - record.position)
                       return (
-                        <button
+                        <div
                           key={`${record.mediaId}:${record.episodeId}`}
                           className={index === 0 ? 'cw-card cw-card-lg' : 'cw-card'}
-                          disabled={media === undefined || episode === undefined}
-                          onClick={() => {
-                            if (media !== undefined && episode !== undefined) {
-                              onPlay(media, episode, record.position)
-                            }
-                          }}
                         >
-                          <span className="cw-cover" style={posterGradient(record.mediaTitle)}>
-                            <span className="cw-cover-art">{monogram(record.mediaTitle)}</span>
-                            <span className="cw-cover-scrim" aria-hidden="true" />
-                            <span className="cw-play" aria-hidden="true">
-                              <Icon name="play" size={18} />
+                          <button
+                            type="button"
+                            className="cw-main"
+                            disabled={media === undefined || episode === undefined}
+                            onClick={() => {
+                              if (media !== undefined && episode !== undefined) {
+                                onPlay(media, episode, record.position)
+                              }
+                            }}
+                          >
+                            <span className="cw-cover" style={posterGradient(record.mediaTitle)}>
+                              <span className="cw-cover-art">{monogram(record.mediaTitle)}</span>
+                              <span className="cw-cover-scrim" aria-hidden="true" />
+                              <span className="cw-play" aria-hidden="true">
+                                <Icon name="play" size={18} />
+                              </span>
+                              <span className="cw-progress" aria-hidden="true">
+                                <span className="cw-progress-fill" style={{ width: `${pct}%` }} />
+                              </span>
                             </span>
-                            <span className="cw-progress" aria-hidden="true">
-                              <span className="cw-progress-fill" style={{ width: `${pct}%` }} />
+                            <span className="cw-title">{record.mediaTitle}</span>
+                            <span className="cw-meta">
+                              {record.episodeTitle} ·{' '}
+                              {record.completed ? '已看完' : `剩余 ${formatTime(remaining)}`}
                             </span>
-                          </span>
-                          <span className="cw-title">{record.mediaTitle}</span>
-                          <span className="cw-meta">
-                            {record.episodeTitle} ·{' '}
-                            {record.completed
-                              ? '已看完'
-                              : `剩余 ${formatTime(remaining)}`}
-                          </span>
-                        </button>
+                          </button>
+                          <button
+                            type="button"
+                            className="cw-remove"
+                            aria-label={`移除「${record.mediaTitle}」的播放记录`}
+                            title="移除记录"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              void removeRecord(record)
+                            }}
+                          >
+                            <Icon name="close" size={14} />
+                          </button>
+                        </div>
                       )
                     })}
                   </Rail>
