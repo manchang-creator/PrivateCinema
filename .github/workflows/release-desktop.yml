@@ -77,12 +77,20 @@ jobs:
         run: |
           V="${{ steps.ver.outputs.version }}"
           ( cd desktop/build/windows-amd64 && zip -q -9 "private-cinema-${V}-windows-amd64-portable.zip" "私人影院.exe" )
-          ( cd desktop/build && sha256sum \
+          # 只为实际存在的产物生成校验和：更新清单(update-*.json)仅在配置了签名私钥时才产出，
+          # 未配置时不能让它把整步 sha256sum 拖挂。
+          ( cd desktop/build
+            : > SHA256SUMS
+            for f in \
               linux-amd64/*.deb linux-amd64/*.rpm linux-amd64/*.tar.gz linux-amd64/update-*.json \
-              windows-amd64/*.exe windows-amd64/*.zip windows-amd64/*.tar.gz windows-amd64/update-*.json \
-              > SHA256SUMS )
-          echo '--- update manifests ---'
-          cat desktop/build/linux-amd64/update-*.json desktop/build/windows-amd64/update-*.json || true
+              windows-amd64/*.exe windows-amd64/*.zip windows-amd64/update-*.json ; do
+              if [ -f "$f" ]; then sha256sum "$f" >> SHA256SUMS; fi
+            done
+            echo '--- SHA256SUMS ---'
+            cat SHA256SUMS
+          )
+          echo '--- update manifests (可能不存在：无签名私钥时) ---'
+          cat desktop/build/linux-amd64/update-*.json desktop/build/windows-amd64/update-*.json 2>/dev/null || true
           echo '--- build dir ---'
           ls -lh desktop/build/linux-amd64 desktop/build/windows-amd64
 
@@ -93,16 +101,16 @@ jobs:
           name: PrivateCinema ${{ steps.ver.outputs.tag }}
           draft: false
           generate_release_notes: true
-          fail_on_unmatched_files: true
+          # 更新清单(update-*.json)可能因缺少签名私钥而缺席；不要让个别文件缺失导致整个发布失败。
+          fail_on_unmatched_files: false
           files: |
             desktop/build/linux-amd64/*.deb
             desktop/build/linux-amd64/*.rpm
             desktop/build/linux-amd64/*.tar.gz
-            desktop/build/linux-amd64/update-linux-amd64.json
+            desktop/build/linux-amd64/update-*.json
             desktop/build/windows-amd64/*setup*.exe
             desktop/build/windows-amd64/*portable*.zip
-            desktop/build/windows-amd64/*.tar.gz
-            desktop/build/windows-amd64/update-windows-amd64.json
+            desktop/build/windows-amd64/update-*.json
             desktop/build/SHA256SUMS
 
       - name: Upload build artifacts (backup)
