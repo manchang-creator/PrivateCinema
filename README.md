@@ -11,6 +11,11 @@ iOS 客户端已暂停验收，当前迭代重心在桌面端。两者共用跨�
 `packages/core`（`@private-cinema/core`：领域模型、IPC 契约、弹幕引擎、字幕解析），
 各自的壳分别位于 `windows/`、`linux/` 目录。
 
+> **重构进行中（mygo）**：桌面端正在从 Electron 迁移到 [mygo](https://github.com/egoist/mygo)
+> （Go 后端 + 复用现有 React 前端，产物为单个纯 Go 二进制）。新工程在 `desktop/`，说明见
+> [`docs/2026-11-13-mygo-refactor.md`](docs/2026-11-13-mygo-refactor.md)。迁移验收前
+> `windows/`、`linux/`（Electron）保留作对照。
+
 | 端 | 目录 | 系统专属能力 |
 |---|---|---|
 | Windows | `windows/` | Windows 系统亮度（WMI / DDC） |

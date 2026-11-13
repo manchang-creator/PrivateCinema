@@ -1,0 +1,30 @@
+{
+  "name": "private-cinema-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "私人影院桌面端（mygo：Go 后端 + React 前端）",
+  "scripts": {
+    "dev": "go run github.com/egoist/mygo/cmd/mygo@v0.9.0 dev",
+    "build": "go run github.com/egoist/mygo/cmd/mygo@v0.9.0 build",
+    "generate": "go run github.com/egoist/mygo/cmd/mygo@v0.9.0 generate",
+    "dev:web": "vite",
+    "build:web": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@private-cinema/core": "file:../packages/core",
+    "hls.js": "^1.7.4",
+    "mygo-runtime": "^0.9.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "mygo-cli": "^0.9.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7"
+  }
+}
