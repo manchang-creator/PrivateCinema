@@ -28,6 +28,21 @@ SMOKE_KEEP=1     bash desktop/scripts/mygo-smoke.sh   # 保留并打印应用日
 SMOKE_OUT=/tmp/x.png SMOKE_TIMEOUT=40 bash desktop/scripts/mygo-smoke.sh
 ```
 
+## 本地文件 GUI 端到端测试（选片 → 播放 → 字幕/弹幕 → 续播）
+
+改到本地播放/进度/字幕相关逻辑，或需要一次真机端到端验收时，跑：
+
+```bash
+bash desktop/scripts/local-e2e.sh        # 输出 [PASS]
+```
+
+脚本会：ffmpeg 生成 65s mp4 + 同名 srt → 启动 e2e 应用 → 用仅 e2e 构建编入的
+`Cinema.SeedPaths` 通道播种片库（**绕过无法自动化的原生 GTK 文件对话框**，其余全走真实代码）→ 断言
+`video.duration≈65`、字幕层文案、弹幕 canvas 与开关、退出落盘后「继续观看」、点击后续播起点≈原位置 → 截图到
+[docs/local-e2e/](docs/local-e2e/)。
+
+常用开关：`E2E_SKIP_WEB=1`、`E2E_KEEP=1`、`E2E_OUT_DIR=<dir>`、`E2E_TIMEOUT=<sec>`。
+
 ## 环境要求
 
 - 有图形会话：`DISPLAY` 必须存在（脚本在无 `DISPLAY` 时直接失败）。
@@ -41,6 +56,7 @@ SMOKE_OUT=/tmp/x.png SMOKE_TIMEOUT=40 bash desktop/scripts/mygo-smoke.sh
   - 可用：`windows`、`eval`、`screenshot`、`wait`；
   - **不可用**：`snapshot` / `press` / `fill` / `click`（这些只对 native UI 窗口有效，网页窗口返回 `unsupported`）——网页一律走 `eval`。
 - 自动化开关文件是 [desktop/automation_e2e.go](desktop/automation_e2e.go)（`//go:build e2e` + blank import 插件），只在 `go build -tags e2e` 编入；`mygo build` 发布包不含它。
+- 同理 [desktop/automation_seed.go](desktop/automation_seed.go) 是仅 e2e 编入的 `Cinema.SeedPaths(paths)` 测试通道（绕过原生文件对话框播种片库），前端用 `globalThis.mygo.call("Cinema.SeedPaths", paths)` 直接调，不写进生成的 `src/mygo.ts`、不进发布包。
 - 媒体播放走 `127.0.0.1` loopback HTTP（`media_server.go` + `http.ServeContent`），不是自定义协议。
 - 相关技能：`mygo-automation`（DSH 已安装）。需要完整用法时执行 `mygo-automation skills`。
 

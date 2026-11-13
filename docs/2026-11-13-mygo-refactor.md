@@ -200,3 +200,28 @@ WebView（WebKitGTK/WebView2）受容器/编码白名单限制，MKV 常 `MEDIA_
 
 > WebCodecs 方案需要自带 MKV 解封装 + 视频/音频 WebCodecs 解码 + 字幕/弹幕时间轴对齐，
 > 工作量远大于外部播放器兜底，暂不做；外部播放器已能覆盖 MKV 的实际使用需求。
+
+## 10. 本地文件 GUI 端到端自动化（选片 → 播放 → 字幕/弹幕 → 续播）
+
+交接文档里唯一的自动化缺口是「本地文件 GUI 端到端」：选文件要走原生 GTK 文件对话框，无法被
+`mygo-automation` 驱动（`desktop/` 是 `kind=page` 窗口，`snapshot/press/fill/click` 只对 native UI 有效；
+GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构建编入**的测试通道，其余全部走真实生产代码：
+
+| 组件 | 文件 | 说明 |
+|---|---|---|
+| 播种通道 | `desktop/automation_seed.go`（`//go:build e2e`） | `Cinema.SeedPaths(paths []string)`：与 `PickVideos` 去掉对话框后完全一致——`access.Authorize` + `buildLibrary`。只在 `go build -tags e2e` 编入，`mygo build` 发布包不含，也不写进生成的 `src/mygo.ts`。 |
+| 端到端脚本 | `desktop/scripts/local-e2e.sh` | ffmpeg 生成 65s mp4 + 同名 srt → 启动 e2e 应用（隔离 `XDG_DATA_HOME`）→ 用 `eval` 把 `window.cinema.pickVideos` 改指向 `globalThis.mygo.call('Cinema.SeedPaths',[path])` → 点「选择视频文件」→ 后续全部真实驱动。 |
+
+脚本断言链（真机 X11 实测，输出 `[PASS]`）：
+
+1. **选片/扫描**：播种后片库网格出现 `E2E 演示片`；
+2. **播放/解码**：点击单集进播放页，`<video>.duration ≈ 65s`（证明容器 + H.264 编码可解码）；
+3. **字幕**：`currentTime=2s` 后 `.subtitle-layer` 出现同名 srt 的「E2E 字幕校验行」；
+4. **弹幕**：`.danmaku-canvas` 挂载、`弹幕 开/关` 可切换（65s > 60s 才会有种子弹幕）；
+5. **续播**：`currentTime=42s` → 点「返回」触发卸载清理落盘 → 片库「继续观看 00:42/01:05」→ 点卡片从 42s 恢复。
+
+截图：`docs/local-e2e/{1-library,2-player-subtitle,3-library-continue,4-player-resumed}.png`。
+实测结论：本地链路（扫描 → loopback HTTP Range 播放 → 字幕叠加 → canvas 弹幕 → 进度落盘/恢复）端到端打通。
+
+> 这同时补上了交接文档「阶段二·真实端到端播放」缺口：此前只验证了开窗/在线出图/媒体 Range 单测，
+> 现在本地 mp4+srt 的完整播放-字幕-弹幕-续播链路有了可重复的真机自动化验收。
