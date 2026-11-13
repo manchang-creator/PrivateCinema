@@ -11,12 +11,17 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
+	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -60,16 +65,23 @@ var contentTypes = map[string]string{
 
 // MediaServer loopback 媒体服务。
 type MediaServer struct {
-	access *AccessRegistry
-	token  string
-	url    string
-	mu     sync.RWMutex
+	access    *AccessRegistry
+	token     string
+	url       string
+	posterDir string
+	client    *http.Client
+	mu        sync.RWMutex
 }
 
 func newMediaServer(access *AccessRegistry) *MediaServer {
 	buf := make([]byte, 16)
 	_, _ = rand.Read(buf)
-	return &MediaServer{access: access, token: hex.EncodeToString(buf)}
+	return &MediaServer{
+		access:    access,
+		token:     hex.EncodeToString(buf),
+		posterDir: filepath.Join(os.TempDir(), "private-cinema-posters"),
+		client:    &http.Client{Timeout: 20 * time.Second},
+	}
 }
 
 // Start 监听 127.0.0.1 的随机空闲端口。返回后可经 URL() 取基址。
@@ -103,7 +115,14 @@ func (m *MediaServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	encoded := strings.TrimPrefix(r.URL.Path, prefix)
+	rest := strings.TrimPrefix(r.URL.Path, prefix)
+	// 海报代理：HEIC/HEIF 封面 WebView 不能解码，这里取回后转成 JPEG 再喂给前端。
+	// 形如 http://127.0.0.1:PORT/<token>/poster?u=<urlencoded 上游图片 URL>
+	if rest == "poster" {
+		m.servePoster(w, r)
+		return
+	}
+	encoded := rest
 	filePath, err := decodeMediaPath(encoded)
 	if err != nil || filePath == "" {
 		http.Error(w, "非法请求", http.StatusBadRequest)
@@ -148,6 +167,139 @@ func (m *MediaServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func modTime(info os.FileInfo) time.Time { return info.ModTime() }
+
+// ---- 海报代理：HEIC/HEIF → JPEG ----
+
+// posterHostSuffixes 只代理这些 CDN 域名的图片，避免被渲染进程当成任意 URL 抓取器（SSRF）。
+var posterHostSuffixes = []string{
+	"fqnovelpic.com", "byteimg.com", "douyinpic.com", "snssdk.com", "bytedance.com",
+}
+
+func allowedPosterHost(host string) bool {
+	h := strings.ToLower(host)
+	for _, s := range posterHostSuffixes {
+		if h == s || strings.HasSuffix(h, "."+s) {
+			return true
+		}
+	}
+	return false
+}
+
+// posterConvertCommand 选一个可用的图片转换工具把 HEIC 转 JPEG。
+// 优先 ImageMagick 7 的 magick；Linux/macOS 回退 convert；Windows 上不调用自带的
+// convert.exe（那是磁盘转换工具），只认 magick。
+func posterConvertCommand(src, dst string) *exec.Cmd {
+	if p, err := exec.LookPath("magick"); err == nil {
+		return exec.Command(p, src, "-quality", "86", dst)
+	}
+	if runtime.GOOS != "windows" {
+		if p, err := exec.LookPath("convert"); err == nil {
+			return exec.Command(p, src, "-quality", "86", dst)
+		}
+	}
+	return nil
+}
+
+func serveImageFile(w http.ResponseWriter, r *http.Request, path string) {	f, err := os.Open(path)
+	if err != nil {
+		http.Error(w, "图片不可读", http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		http.Error(w, "图片不存在", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeContent(w, r, "poster.jpg", modTime(info), f)
+}
+
+func (m *MediaServer) servePoster(w http.ResponseWriter, r *http.Request) {
+	raw := r.URL.Query().Get("u")
+	if raw == "" {
+		http.Error(w, "缺少图片地址", http.StatusBadRequest)
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || !allowedPosterHost(u.Hostname()) {
+		http.Error(w, "不允许的图片地址", http.StatusForbidden)
+		return
+	}
+	sum := sha1.Sum([]byte(raw))
+	key := hex.EncodeToString(sum[:])
+	dst := filepath.Join(m.posterDir, key+".jpg")
+	if _, err := os.Stat(dst); err == nil {
+		serveImageFile(w, r, dst)
+		return
+	}
+	if err := os.MkdirAll(m.posterDir, 0o755); err != nil {
+		http.Error(w, "缓存目录不可用", http.StatusInternalServerError)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, raw, nil)
+	if err != nil {
+		http.Error(w, "图片请求构造失败", http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (PrivateCinema)")
+	req.Header.Set("Referer", "")
+	resp, err := m.client.Do(req)
+	if err != nil {
+		http.Error(w, "图片下载失败", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "图片下载失败", http.StatusBadGateway)
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	if err != nil || len(data) == 0 {
+		http.Error(w, "图片读取失败", http.StatusBadGateway)
+		return
+	}
+
+	ctype := strings.ToLower(resp.Header.Get("Content-Type"))
+	// 本就是浏览器能解的格式：直接落盘返回
+	if strings.Contains(ctype, "jpeg") || strings.Contains(ctype, "png") || strings.Contains(ctype, "webp") {
+		tmp := dst + ".tmp"
+		if err := os.WriteFile(tmp, data, 0o644); err != nil {
+			http.Error(w, "图片缓存失败", http.StatusInternalServerError)
+			return
+		}
+		_ = os.Rename(tmp, dst)
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(data)
+		return
+	}
+
+	// HEIC/HEIF 等：用 ImageMagick 转 JPEG（系统已装 libheif 支持读取 HEIC）
+	src := filepath.Join(m.posterDir, key+".src")
+	if err := os.WriteFile(src, data, 0o644); err != nil {
+		http.Error(w, "图片缓存失败", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(src)
+	tmp := dst + ".tmp.jpg"
+	cmd := posterConvertCommand(src, tmp)
+	if cmd == nil {
+		http.Error(w, "缺少图片转换工具（ImageMagick）", http.StatusBadGateway)
+		return
+	}
+	if _, cerr := cmd.CombinedOutput(); cerr != nil {
+		http.Error(w, "图片转换失败", http.StatusBadGateway)
+		return
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		http.Error(w, "图片缓存失败", http.StatusInternalServerError)
+		return
+	}
+	serveImageFile(w, r, dst)
+}
 
 // encodeMediaPath 绝对路径 → URL 安全 base64（RawURLEncoding：无 =，+ / 已被替换）。
 func encodeMediaPath(path string) string {

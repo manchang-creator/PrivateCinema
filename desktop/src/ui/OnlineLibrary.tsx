@@ -14,12 +14,25 @@ import {
   type RemoteProviderId,
 } from '@private-cinema/core/shared'
 import { useCallback, useEffect, useState, type CSSProperties, type JSX } from 'react'
+import { getMediaBase } from '../media'
 import { Icon } from './icons'
 import { Rail } from './Rail'
 import { ambientVars, backdropGradient, posterGradient } from './palette'
 
 interface Props {
   onPlay: (media: MediaItem, episode: Episode, startPosition: number, playlist?: Episode[]) => void
+}
+
+/**
+ * 封面 URL 归一：红果等片源的封面是 HEIC/HEIF，WebView 解不了，走后端 loopback
+ * 海报代理（把 HEIC 转成 JPEG）；其它格式（jpg/png/webp）原样直连。
+ */
+function proxiedPoster(raw: string): string {
+  if (raw === '') return ''
+  if (!/\.(heic|heif)(\?|#|$)/i.test(raw)) return raw
+  const base = getMediaBase()
+  if (base === '') return raw
+  return `${base}poster?u=${encodeURIComponent(raw)}`
 }
 
 const KIND_TABS: ReadonlyArray<{ key: MediaKind | null; label: string }> = [
@@ -250,9 +263,10 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
         {card.posterUrl !== '' && (
           <img
             className="poster-img"
-            src={card.posterUrl}
+            src={proxiedPoster(card.posterUrl)}
             alt={card.title}
             loading="lazy"
+            referrerPolicy="no-referrer"
             onError={(event) => {
               event.currentTarget.style.display = 'none'
             }}
@@ -353,8 +367,9 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
                 {heroCard.title.slice(0, 1)}
                 {heroCard.posterUrl !== '' && (
                   <img
-                    src={heroCard.posterUrl}
+                    src={proxiedPoster(heroCard.posterUrl)}
                     alt={heroCard.title}
+                    referrerPolicy="no-referrer"
                     onError={(event) => {
                       event.currentTarget.style.display = 'none'
                     }}
@@ -403,8 +418,9 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
                     >
                       {card.posterUrl !== '' && (
                         <img
-                          src={card.posterUrl}
+                          src={proxiedPoster(card.posterUrl)}
                           alt={card.title}
+                          referrerPolicy="no-referrer"
                           style={{
                             position: 'absolute',
                             inset: 0,
@@ -497,8 +513,9 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
                   {active.title.slice(0, 1)}
                   {(detail?.posterUrl ?? active.posterUrl) !== '' && (
                     <img
-                      src={detail?.posterUrl ?? active.posterUrl}
+                      src={proxiedPoster(detail?.posterUrl ?? active.posterUrl)}
                       alt={active.title}
+                      referrerPolicy="no-referrer"
                       onError={(event) => {
                         event.currentTarget.style.display = 'none'
                       }}

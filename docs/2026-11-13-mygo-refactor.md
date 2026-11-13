@@ -301,3 +301,16 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 - `kiroswu/hongguo-shortdramabox`（≈313★）/ `liangzai-kk/hongguo-short-drama-desktop`（≈243★）/ `StriveToLearnCode/hongguo-short-drama-macos`（≈63★）：第三方桌面端；macOS 版支持账号登录（登录态可绕开匿名额度）。
 - `parallelpan/hongguo-downloader`（≈538★）、`M4St3r0/hongguo-downloader`、`wbkboy/hongguo-video-downloader-pro`：解析/下载类（服务端或多出口 IP 轮换 + CENC-AES-128-CTR 解密）。
 结论：无需“逆向破解”第三方客户端；直接用维护中的官方非官方 SDK 升级即可，签名实现为其 clean-room 版本（Apache-2.0）。
+
+### 12.2 封面图修复：HEIC → JPEG 本地海报代理（2026-11-13）
+
+**现象**：红果卡片/详情封面长期显示为首字占位。排查后发现 `posterUrl` 是 `.heic`（`~tplv-...superreso-aifit...heic`），**WebView（WebKitGTK/Chromium）无法解码 HEIC**——与 referer 无关（加 `referrerPolicy` 无效；把扩展名改 jpg/webp 上游返回 403，因为签名绑定原路径）。
+
+**处理**：`media_server.go` 增加 loopback 海报代理 `GET /<token>/poster?u=<urlencoded 上游图 URL>`：
+- 仅放行白名单 CDN 域名（`*.fqnovelpic.com` / `*.byteimg.com` / `*.douyinpic.com` / `*.snssdk.com` / `*.bytedance.com`），防 SSRF；
+- 按 URL 的 SHA-1 落地磁盘缓存；`Content-Type` 已是 jpeg/png/webp 直接返回，HEIC/HEIF 用 ImageMagick（优先 `magick`，非 Windows 回退 `convert`）转 JPEG；
+- 前端 `OnlineLibrary` 增加 `proxiedPoster()`：仅对 `.heic/.heif` 走代理，其它格式直连。
+
+**验证**：`hero_img_loaded=true`，网格封面 `20/20` 成功加载（此前 `0/19`）；首页 Hero 与详情封面均显示真实海报。单测新增 `TestPosterRejectsUnlistedHost` / `TestPosterServesCachedJPEG` / `TestAllowedPosterHost`，`go test ./...` 通过；`mygo-smoke` 与 `local-e2e` 均 `[PASS]`。
+
+**已知遗留**：**搜索结果列表**的卡片封面仍为占位——上游 SDK 的搜索解析器（`ParseSearchTab` 的 `video_detail` 主分支）没有把 `cover` 拷进 `SeriesSummary`（`video_detail` 的 `cards` 分支才有）。首页/详情不受影响。可选后续：给 `openhongguo` 提 PR 补该字段，或前端按需用详情补图（会额外耗额度，暂不做）。

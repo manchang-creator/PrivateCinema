@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -59,5 +62,67 @@ func TestMediaServerRejectsUnauthorized(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status=%d want 403", resp.StatusCode)
+	}
+}
+
+func TestPosterRejectsUnlistedHost(t *testing.T) {
+	srv := newMediaServer(newAccessRegistry())
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/" + srv.token + "/poster?u=" + url.QueryEscape("https://evil.example.com/x.heic"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status=%d want 403", resp.StatusCode)
+	}
+	if _, err := http.Get(ts.URL + "/" + srv.token + "/poster"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPosterServesCachedJPEG(t *testing.T) {
+	srv := newMediaServer(newAccessRegistry())
+	srv.posterDir = t.TempDir()
+	raw := "https://p3-reading-sign.fqnovelpic.com/novel-pic/a.heic?x-expires=1&x-signature=s"
+	sum := sha1.Sum([]byte(raw))
+	dst := filepath.Join(srv.posterDir, hex.EncodeToString(sum[:])+".jpg")
+	if err := os.WriteFile(dst, []byte("JPEGDATA"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/" + srv.token + "/poster?u=" + url.QueryEscape(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/jpeg" {
+		t.Fatalf("content-type=%q want image/jpeg", ct)
+	}
+	if string(body) != "JPEGDATA" {
+		t.Fatalf("body=%q", body)
+	}
+}
+
+func TestAllowedPosterHost(t *testing.T) {
+	cases := map[string]bool{
+		"p3-reading-sign.fqnovelpic.com": true,
+		"fqnovelpic.com":                 true,
+		"a.byteimg.com":                  true,
+		"evil.com":                       false,
+		"fqnovelpic.com.evil.com":        false,
+	}
+	for host, want := range cases {
+		if got := allowedPosterHost(host); got != want {
+			t.Errorf("allowedPosterHost(%q)=%v want %v", host, got, want)
+		}
 	}
 }
