@@ -38,6 +38,14 @@ export async function installCinemaBridge(): Promise<void> {
       Cinema.remoteEpisodes(provider, mediaId),
     remoteResolve: (provider: Parameters<typeof Cinema.remoteResolve>[0], episodeToken: string, lineId?: string) =>
       Cinema.remoteResolve(provider, episodeToken, lineId ?? ""),
+    remoteDanmaku: (provider: Parameters<typeof Cinema.remoteDanmaku>[0], seriesId: string, episodeId: string) =>
+      Cinema.remoteDanmaku(provider, seriesId, episodeId),
+    appInfo: () => Cinema.appInfo(),
+    checkUpdate: () => Cinema.checkUpdate(),
+    installUpdate: () => Cinema.installUpdate(),
+    restartApp: () => Cinema.restartApp(),
+    getAutoUpdate: () => Cinema.getAutoUpdate(),
+    setAutoUpdate: (enabled: boolean) => Cinema.setAutoUpdate(enabled),
   } as unknown as CinemaApi;
 
   window.cinema = api;

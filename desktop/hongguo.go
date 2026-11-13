@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -551,6 +552,81 @@ func hongguoEpisodesFetch(mediaID string) ([]RemoteEpisode, error) {
 			Title:  title,
 		})
 	}
+	return out, nil
+}
+
+// ==================== 弹幕 ====================
+
+// hongguoDanmaku 拉取一集的真实弹幕（红果「精选弹幕」评论列表）。
+// 上游按播放时间分窗返回：不带游标时先查一次分集详情拿时长，再从 StartMs 起
+// 逐窗翻到片尾；每台匿名设备拿到的是服务端下发的一个子集（并非全集）。
+// 这里翻完所有窗口、按 id 去重、按时间排序后返回；结果做 TTL 缓存避免反复打上游。
+func hongguoDanmaku(seriesID, episodeID string) ([]DanmakuItem, error) {
+	return withHgCache("hongguo:danmaku:"+episodeID, func() ([]DanmakuItem, error) {
+		return hongguoDanmakuFetch(seriesID, episodeID)
+	})
+}
+
+func hongguoDanmakuFetch(seriesID, episodeID string) ([]DanmakuItem, error) {
+	client, err := getClient()
+	if err != nil {
+		return nil, err
+	}
+
+	// 一个 30s 窗口一页；上限防呆（1 小时 ≈ 120 页），正常短剧几页就结束。
+	const maxPages = 150
+	seen := make(map[string]struct{})
+	out := make([]DanmakuItem, 0, 128)
+	cursor := ""
+	for page := 0; page < maxPages; page++ {
+		ctx, cancel := hongguoCtx()
+		throttleHongguo(ctx)
+		res, err := client.ListDanmaku(ctx, seriesID, episodeID, sdk.DanmakuOptions{Cursor: cursor, PageSize: 90})
+		cancel()
+		if err != nil {
+			// 已经拿到一部分就别因为后续某页失败而整批丢掉。
+			if len(out) > 0 {
+				break
+			}
+			return nil, wrapFriendly(err)
+		}
+		for _, d := range res.Items {
+			if d.ID != "" {
+				if _, ok := seen[d.ID]; ok {
+					continue
+				}
+				seen[d.ID] = struct{}{}
+			}
+			text := strings.TrimSpace(d.Text)
+			if text == "" {
+				continue
+			}
+			id := d.ID
+			if id == "" {
+				id = fmt.Sprintf("%s-%d", episodeID, d.OffsetMS)
+			}
+			created := ""
+			if !d.CreatedAt.IsZero() {
+				created = d.CreatedAt.UTC().Format(time.RFC3339)
+			}
+			out = append(out, DanmakuItem{
+				ID:        "hg-" + id,
+				MediaID:   seriesID,
+				EpisodeID: episodeID,
+				Time:      float64(d.OffsetMS) / 1000.0,
+				Content:   text,
+				Type:      "scroll",
+				Color:     "#FFFFFF",
+				UserID:    "hongguo",
+				CreatedAt: created,
+			})
+		}
+		if !res.HasMore || res.Cursor == "" {
+			break
+		}
+		cursor = res.Cursor
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Time < out[j].Time })
 	return out, nil
 }
 

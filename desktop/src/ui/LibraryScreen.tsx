@@ -7,6 +7,7 @@ import type { Episode, MediaItem, WatchProgress } from '@private-cinema/core/sha
 import { formatSize, formatTime } from '@private-cinema/core/ui'
 import { OnlineLibrary } from './OnlineLibrary'
 import { DisplayMenu } from './DisplayMenu'
+import { SettingsMenu } from './SettingsMenu'
 import { Icon } from './icons'
 import { Rail } from './Rail'
 import { ambientVars, backdropGradient, posterGradient } from './palette'
@@ -216,6 +217,7 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
 
             <div className="topbar-actions">
               <DisplayMenu />
+              <SettingsMenu />
               {tab === 'local' && (
                 <>
                   <button className="icon-btn" disabled={busy} onClick={() => void scan('files')}>

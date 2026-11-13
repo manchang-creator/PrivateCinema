@@ -47,6 +47,7 @@ func main() {
 			envOr("FFMPEG_PATH", "ffmpeg"),
 			filepath.Join(userData, "openhongguo", "anonymous.json"),
 		)
+		configureUpdate(userData)
 
 		// 3) 主窗口。
 		mygo.NewWindow(mygo.WindowOptions{
@@ -60,6 +61,9 @@ func main() {
 			AutoHideMenuBar: true,
 			StateKey:        "main",
 		})
+
+		// 4) 启动后按偏好做一次静默自动更新检查（仅正式构建生效）。
+		go autoUpdateOnStart()
 	})
 
 	if err := mygo.App.Run(); err != nil {

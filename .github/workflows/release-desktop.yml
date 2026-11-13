@@ -67,13 +67,22 @@ jobs:
 
       - name: Build Linux + Windows packages
         working-directory: desktop
+        env:
+          # 签名更新用的私钥（`mygo keygen` 生成的 mygo-update.key 内容），放在仓库 Secrets。
+          # 没有它仍能出包，但不会有可自更新的签名清单。
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: go run github.com/egoist/mygo/cmd/mygo@v0.9.0 build -platform linux/amd64,windows/amd64
 
       - name: Package Windows portable zip + checksums
         run: |
           V="${{ steps.ver.outputs.version }}"
           ( cd desktop/build/windows-amd64 && zip -q -9 "private-cinema-${V}-windows-amd64-portable.zip" "私人影院.exe" )
-          ( cd desktop/build && sha256sum linux-amd64/*.deb linux-amd64/*.rpm linux-amd64/*.tar.gz windows-amd64/*.exe windows-amd64/*.zip > SHA256SUMS )
+          ( cd desktop/build && sha256sum \
+              linux-amd64/*.deb linux-amd64/*.rpm linux-amd64/*.tar.gz linux-amd64/update-*.json \
+              windows-amd64/*.exe windows-amd64/*.zip windows-amd64/*.tar.gz windows-amd64/update-*.json \
+              > SHA256SUMS )
+          echo '--- update manifests ---'
+          cat desktop/build/linux-amd64/update-*.json desktop/build/windows-amd64/update-*.json || true
           echo '--- build dir ---'
           ls -lh desktop/build/linux-amd64 desktop/build/windows-amd64
 
@@ -89,8 +98,11 @@ jobs:
             desktop/build/linux-amd64/*.deb
             desktop/build/linux-amd64/*.rpm
             desktop/build/linux-amd64/*.tar.gz
+            desktop/build/linux-amd64/update-linux-amd64.json
             desktop/build/windows-amd64/*setup*.exe
             desktop/build/windows-amd64/*portable*.zip
+            desktop/build/windows-amd64/*.tar.gz
+            desktop/build/windows-amd64/update-windows-amd64.json
             desktop/build/SHA256SUMS
 
       - name: Upload build artifacts (backup)

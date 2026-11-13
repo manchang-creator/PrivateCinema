@@ -300,7 +300,6 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
               role="tab"
               aria-selected={provider === item.id}
               className={provider === item.id ? 'seg-item active' : 'seg-item'}
-              title={item.description}
               onClick={() => switchProvider(item.id)}
             >
               {item.name}

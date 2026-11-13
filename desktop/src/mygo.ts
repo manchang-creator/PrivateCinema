@@ -4,10 +4,36 @@ import { call } from "mygo-runtime";
 
 // ---- Types ----
 
+/** AppInfo 应用与更新相关的元信息（设置页「关于/更新」用）。 */
+export interface AppInfo {
+  version: string;
+  platform: string;
+  isDev: boolean;
+  updatesEnabled: boolean;
+  autoUpdate: boolean;
+}
+
 /** BrightnessWriteResult 亮度写入结果。 */
 export interface BrightnessWriteResult {
   ok: boolean;
   reason?: string;
+}
+
+/**
+ * DanmakuItem 一条弹幕。字段与 packages/core/src/shared/types.ts 的 DanmakuItem 对齐，
+ * 前端拿到后可直接喂给弹幕引擎。time 为视频时间点（秒）。
+ */
+export interface DanmakuItem {
+  id: string;
+  mediaId: string;
+  episodeId: string;
+  time: number;
+  content: string;
+  /** "scroll" | "top" | "bottom" */
+  type: string;
+  color: string;
+  userId: string;
+  createdAt: string;
 }
 
 /** DisplayBrightness 一台显示器的亮度状态（联合类型用可选字段表达）。 */
@@ -150,6 +176,16 @@ export interface SubtitleFile {
   content: string;
 }
 
+/** UpdateInfo 一次「检查更新」的结果。 */
+export interface UpdateInfo {
+  enabled: boolean;
+  available: boolean;
+  current: string;
+  version: string;
+  notes: string;
+  date: string;
+}
+
 /** WatchProgress 播放进度。 */
 export interface WatchProgress {
   mediaId: string;
@@ -167,9 +203,25 @@ export interface WatchProgress {
 
 /** Cinema 是暴露给前端的服务集合。 */
 export const Cinema = {
+  /** AppInfo 返回应用与更新的元信息。 */
+  appInfo(): Promise<AppInfo> {
+    return call("Cinema.AppInfo");
+  },
+  /** CheckUpdate 检查是否有新版本。未启用更新的构建直接返回 enabled=false。 */
+  checkUpdate(): Promise<UpdateInfo> {
+    return call("Cinema.CheckUpdate");
+  },
   /** FindSubtitle 在视频同目录下按同名规则查找字幕，找到则返回文本内容。 */
   findSubtitle(videoPath: string): Promise<SubtitleFile | null> {
     return call("Cinema.FindSubtitle", videoPath);
+  },
+  /** GetAutoUpdate 读取「自动更新」开关。 */
+  getAutoUpdate(): Promise<boolean> {
+    return call("Cinema.GetAutoUpdate");
+  },
+  /** InstallUpdate 下载并安装上次 CheckUpdate 找到的更新（不自动重启，由前端调 RestartApp）。 */
+  installUpdate(): Promise<void> {
+    return call("Cinema.InstallUpdate");
   },
   /** ListDisplays 列出所有显示器的亮度状态；不可用的也返回并附原因。 */
   listDisplays(): Promise<DisplayBrightness[]> {
@@ -207,6 +259,10 @@ export const Cinema = {
   remoteBrowse(provider: string, kind: string, page: number): Promise<RemoteBrowsePage> {
     return call("Cinema.RemoteBrowse", provider, kind, page);
   },
+  /** RemoteDanmaku 拉取一集的弹幕。红果有真实精选弹幕，其它片源返回空数组。 */
+  remoteDanmaku(provider: string, seriesID: string, episodeID: string): Promise<DanmakuItem[]> {
+    return call("Cinema.RemoteDanmaku", provider, seriesID, episodeID);
+  },
   /** RemoteDetail 在线作品详情。 */
   remoteDetail(provider: string, mediaID: string): Promise<RemoteDetail> {
     return call("Cinema.RemoteDetail", provider, mediaID);
@@ -231,9 +287,17 @@ export const Cinema = {
   removeProgress(query: ProgressQuery): Promise<void> {
     return call("Cinema.RemoveProgress", query);
   },
+  /** RestartApp 重启应用，让已安装的更新生效。 */
+  restartApp(): Promise<void> {
+    return call("Cinema.RestartApp");
+  },
   /** SaveProgress 写入某集的播放进度。 */
   saveProgress(progress: WatchProgress): Promise<void> {
     return call("Cinema.SaveProgress", progress);
+  },
+  /** SetAutoUpdate 设置「自动更新」开关并落盘。 */
+  setAutoUpdate(enabled: boolean): Promise<void> {
+    return call("Cinema.SetAutoUpdate", enabled);
   },
   /** SetBrightness 设置某台显示器的亮度，值会被收敛到支持范围。 */
   setBrightness(id: string, value: number): Promise<BrightnessWriteResult> {

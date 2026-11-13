@@ -57,3 +57,13 @@ func remoteResolve(provider, episodeToken, lineID string, serveLocal func(string
 func isValidProvider(provider string) bool {
 	return provider == "kanju" || provider == "hongguo"
 }
+
+// remoteDanmaku 拉取一集的真实弹幕。目前只有红果上游提供弹幕接口；其它片源返回空。
+func remoteDanmaku(provider, seriesID, episodeID string) ([]DanmakuItem, error) {
+	if provider == "hongguo" {
+		return withQuotaRetry("danmaku", func() ([]DanmakuItem, error) {
+			return hongguoDanmaku(seriesID, episodeID)
+		})
+	}
+	return []DanmakuItem{}, nil
+}

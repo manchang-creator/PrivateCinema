@@ -177,3 +177,36 @@ type RemotePlayback struct {
 	LineLabel string       `json:"lineLabel"`
 	Lines     []RemoteLine `json:"lines"`
 }
+
+// DanmakuItem 一条弹幕。字段与 packages/core/src/shared/types.ts 的 DanmakuItem 对齐，
+// 前端拿到后可直接喂给弹幕引擎。time 为视频时间点（秒）。
+type DanmakuItem struct {
+	ID        string  `json:"id"`
+	MediaID   string  `json:"mediaId"`
+	EpisodeID string  `json:"episodeId"`
+	Time      float64 `json:"time"`
+	Content   string  `json:"content"`
+	Type      string  `json:"type"` // "scroll" | "top" | "bottom"
+	Color     string  `json:"color"`
+	UserID    string  `json:"userId"`
+	CreatedAt string  `json:"createdAt"`
+}
+
+// AppInfo 应用与更新相关的元信息（设置页「关于/更新」用）。
+type AppInfo struct {
+	Version        string `json:"version"`
+	Platform       string `json:"platform"`
+	IsDev          bool   `json:"isDev"`
+	UpdatesEnabled bool   `json:"updatesEnabled"`
+	AutoUpdate     bool   `json:"autoUpdate"`
+}
+
+// UpdateInfo 一次「检查更新」的结果。
+type UpdateInfo struct {
+	Enabled   bool   `json:"enabled"`
+	Available bool   `json:"available"`
+	Current   string `json:"current"`
+	Version   string `json:"version"`
+	Notes     string `json:"notes"`
+	Date      string `json:"date"`
+}

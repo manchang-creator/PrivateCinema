@@ -12,4 +12,13 @@ export default defineConfig({
   frontendDist: "dist",
   bindings: "src/mygo.ts",
   out: "build",
+  // 签名更新：mygo.Updater 用这个公钥校验更新包。私钥（mygo-update.key）不入库，
+  // 放在发布机的 ~/.config/mygo/update-keys/ 或 CI 的 MYGO_UPDATER_PRIVATE_KEY。
+  // `mygo build` 会按 github 的 release 约定产出并（加 -upload 时）上传签名更新。
+  updates: {
+    publicKey: "pIYIKW4Qne/6KXmSBr1SniVVF4KjFGd5HXj94Ij/3cw=",
+    github: "manchang-creator/PrivateCinema",
+    tagPrefix: "v",
+    deltas: 3,
+  },
 });

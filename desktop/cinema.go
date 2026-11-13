@@ -201,3 +201,11 @@ func (c *Cinema) RemoteResolve(provider, episodeToken, lineID string) (RemotePla
 	}
 	return remoteResolve(provider, episodeToken, lineID, serveLocal)
 }
+
+// RemoteDanmaku 拉取一集的弹幕。红果有真实精选弹幕，其它片源返回空数组。
+func (c *Cinema) RemoteDanmaku(provider, seriesID, episodeID string) ([]DanmakuItem, error) {
+	if !isValidProvider(provider) {
+		return nil, errors.New("未知片源 " + provider)
+	}
+	return remoteDanmaku(provider, seriesID, episodeID)
+}

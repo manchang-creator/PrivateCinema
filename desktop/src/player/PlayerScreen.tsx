@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import Hls from 'hls.js'
 import {
   isCompleted,
+  type DanmakuItem,
   type DisplayBrightness,
   type Episode,
   type MediaItem,
@@ -135,10 +136,33 @@ export function PlayerScreen({
   }, [src, playbackKind])
 
 
-  // 演示弹幕：本地片源没有弹幕服务器，按 episodeId 生成确定性分布
+  // 红果有真实弹幕：进入/切换分集时异步拉取；拿不到再回退演示弹幕。
+  const [remoteDanmaku, setRemoteDanmaku] = useState<DanmakuItem[]>([])
+  useEffect(() => {
+    let cancelled = false
+    setRemoteDanmaku([])
+    const episodeToken = episode.episodeToken ?? ''
+    if (episode.source !== 'hongguo' || episodeToken === '') return
+    void (async () => {
+      try {
+        const items = await window.cinema.remoteDanmaku('hongguo', media.id, episodeToken)
+        if (!cancelled && items.length > 0) setRemoteDanmaku(items)
+      } catch {
+        // 拉取失败：保留空数组，下面自动回退演示弹幕
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [media.id, episode.id, episode.source, episode.episodeToken])
+
+  // 演示弹幕兜底：本地/其它片源或红果拉不到时，按 episodeId 生成确定性分布。
   const danmakuItems = useMemo(
-    () => seedDanmaku(media.id, episode.id, duration),
-    [media.id, episode.id, duration],
+    () =>
+      remoteDanmaku.length > 0
+        ? remoteDanmaku
+        : seedDanmaku(media.id, episode.id, duration),
+    [remoteDanmaku, media.id, episode.id, duration],
   )
   const visibleDanmaku = useMemo(
     () => filterItems(danmakuItems, settings),

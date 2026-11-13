@@ -2,7 +2,7 @@
 // 主进程 / 预加载 / 渲染进程三方共享的唯一接口定义。
 // 改这里 = 改协议，三端必须同步；渲染进程只通过 `window.cinema` 访问。
 
-import type { Episode, MediaItem, MediaKind, WatchProgress } from './types'
+import type { DanmakuItem, Episode, MediaItem, MediaKind, WatchProgress } from './types'
 
 /** 扫描结果：一部「作品」对应一个条目 + 至少一集。 */
 export interface LibraryScan {
@@ -33,8 +33,8 @@ export interface RemoteProviderInfo {
 
 /** 已接入的在线片源清单，唯一事实源。 */
 export const REMOTE_PROVIDERS: ReadonlyArray<RemoteProviderInfo> = [
-  { id: 'kanju', name: '看剧AI', description: 'kanju1.com 聚合片源（电影 / 剧集 / 动漫 / 综艺）' },
-  { id: 'hongguo', name: '红果短剧', description: '红果短剧非官方接口（真人短剧 / 漫剧）' },
+  { id: 'kanju', name: '看剧AI', description: '聚合片源（电影 / 剧集 / 动漫 / 综艺）' },
+  { id: 'hongguo', name: '红果短剧', description: '短剧专区（真人短剧 / 漫剧）' },
 ]
 
 /** 远端片库卡片。字段已归一化为领域模型所需的最小集。 */
@@ -194,6 +194,45 @@ export interface CinemaApi {
     episodeToken: string,
     lineId?: string,
   ): Promise<RemotePlayback>
+  /** 拉取一集的弹幕（红果有真实精选弹幕，其余片源返回空）。 */
+  remoteDanmaku(
+    provider: RemoteProviderId,
+    seriesId: string,
+    episodeId: string,
+  ): Promise<DanmakuItem[]>
+
+  // ---------- 应用更新 ----------
+  /** 应用与更新元信息（版本 / 平台 / 是否启用更新 / 自动更新开关）。 */
+  appInfo(): Promise<AppInfo>
+  /** 检查更新（未启用更新的构建返回 enabled=false）。 */
+  checkUpdate(): Promise<UpdateInfo>
+  /** 下载并安装检查到的更新（不自动重启）。 */
+  installUpdate(): Promise<void>
+  /** 重启应用，让已安装的更新生效。 */
+  restartApp(): Promise<void>
+  /** 读取「自动更新」开关。 */
+  getAutoUpdate(): Promise<boolean>
+  /** 设置「自动更新」开关。 */
+  setAutoUpdate(enabled: boolean): Promise<void>
+}
+
+/** 应用与更新元信息。 */
+export interface AppInfo {
+  version: string
+  platform: string
+  isDev: boolean
+  updatesEnabled: boolean
+  autoUpdate: boolean
+}
+
+/** 一次「检查更新」的结果。 */
+export interface UpdateInfo {
+  enabled: boolean
+  available: boolean
+  current: string
+  version: string
+  notes: string
+  date: string
 }
 
 /** 字幕文件内容：文件名仅用于界面展示。 */
