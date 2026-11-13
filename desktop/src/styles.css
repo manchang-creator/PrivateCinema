@@ -767,13 +767,29 @@ select {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.22);
+  height: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  opacity: 0.55;
+  transition:
+    opacity 0.18s ease,
+    height 0.18s ease;
 }
 .cw-progress-fill {
   height: 100%;
   border-radius: 0 999px 999px 0;
+  background: rgba(255, 255, 255, 0.6);
+  transition: background 0.18s ease;
+}
+/* cezzu 式：进度条平时压暗，悬浮时点亮加厚 */
+.cw-card:hover .cw-progress,
+.cw-card:focus-visible .cw-progress {
+  opacity: 1;
+  height: 5px;
+}
+.cw-card:hover .cw-progress-fill,
+.cw-card:focus-visible .cw-progress-fill {
   background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.55);
 }
 .cw-title {
   font-size: 13.5px;

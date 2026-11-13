@@ -129,17 +129,17 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
 
   const ambientSeed = featured?.title ?? 'PrivateCinema'
 
-  const continueRecords = useMemo(
-    () =>
-      progress
-        .filter(
-          (record) =>
-            items.some((item) => item.id === record.mediaId) &&
-            episodes.some((item) => item.id === record.episodeId),
-        )
-        .slice(0, 14),
-    [progress, items, episodes],
-  )
+  const continueRecords = useMemo(() => {
+    const valid = progress.filter(
+      (record) =>
+        items.some((item) => item.id === record.mediaId) &&
+        episodes.some((item) => item.id === record.episodeId),
+    )
+    // 已看完的沉到末尾；未看完的保持原有（最近优先）顺序，首条走大卡
+    const active = valid.filter((record) => !record.completed)
+    const done = valid.filter((record) => record.completed)
+    return [...active, ...done].slice(0, 14)
+  }, [progress, items, episodes])
 
   const playFeatured = useCallback(() => {
     if (featured === null || featuredEpisodes.length === 0) return
