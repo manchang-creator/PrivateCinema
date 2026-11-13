@@ -199,6 +199,10 @@ export const Cinema = {
   pickVideos(): Promise<LibraryScan | null> {
     return call("Cinema.PickVideos");
   },
+  /** PlayExternal 用外部播放器打开一个本地文件，返回所用播放器名。仅限已授权文件。 */
+  playExternal(filePath: string): Promise<string> {
+    return call("Cinema.PlayExternal", filePath);
+  },
   /** RemoteBrowse 在线分类浏览；kind 为空表示不限类型。 */
   remoteBrowse(provider: string, kind: string, page: number): Promise<RemoteBrowsePage> {
     return call("Cinema.RemoteBrowse", provider, kind, page);

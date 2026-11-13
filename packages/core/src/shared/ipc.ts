@@ -163,6 +163,11 @@ export interface CinemaApi {
   listDisplays(): Promise<DisplayBrightness[]>
   /** 设置某台显示器的亮度，值会被收敛到该显示器支持的范围。 */
   setBrightness(id: string, value: number): Promise<BrightnessWriteResult>
+  /**
+   * 用外部播放器打开一个本地文件（MKV 等 WebView 不支持的容器）。
+   * 返回所用播放器名。可选：旧 Electron 壳未实现。
+   */
+  playExternal?(filePath: string): Promise<string>
 
   // ---------- 在线片源（多源）----------
   /** 拉取在线首页聚合（多个分区）。 */

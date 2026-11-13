@@ -26,6 +26,7 @@ export async function installCinemaBridge(): Promise<void> {
     removeProgress: (query: Parameters<typeof Cinema.removeProgress>[0]) => Cinema.removeProgress(query),
     listDisplays: () => Cinema.listDisplays(),
     setBrightness: (id: string, value: number) => Cinema.setBrightness(id, value),
+    playExternal: (filePath: string) => Cinema.playExternal(filePath),
     remoteHome: (provider: Parameters<typeof Cinema.remoteHome>[0]) => Cinema.remoteHome(provider),
     remoteBrowse: (provider: Parameters<typeof Cinema.remoteBrowse>[0], kind: string | null, page: number) =>
       Cinema.remoteBrowse(provider, kind ?? "", page),

@@ -210,6 +210,18 @@ export function PlayerScreen({
     setCues(parseSubtitle(picked.content))
   }, [])
 
+  // MKV 等 WebView 不支持的容器：交给系统播放器（mpv/vlc）。
+  const openExternal = useCallback(async () => {
+    try {
+      const player = await window.cinema.playExternal?.(episode.filePath)
+      if (player !== undefined && player !== '') {
+        setError(`已用外部播放器（${player}）打开：${episode.title}`)
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }, [episode.filePath, episode.title])
+
   // ==================== 视频事件 ====================
 
   useEffect(() => {
@@ -260,7 +272,10 @@ export function PlayerScreen({
             : code === MediaError.MEDIA_ERR_NETWORK
               ? '（读取中断）'
               : ''
-      setError(`无法播放：${episode.title}${detail}${code > 0 ? ` [错误码 ${code}]` : ''}`)
+      setError(
+        `无法播放：${episode.title}${detail}${code > 0 ? ` [错误码 ${code}]` : ''}` +
+          (isRemote ? '' : '（可点「外部播放」用系统播放器打开）'),
+      )
       setPlaying(false)
     }
 
@@ -278,7 +293,7 @@ export function PlayerScreen({
       video.removeEventListener('ended', onEnded)
       video.removeEventListener('error', onError)
     }
-  }, [currentIndex, episode.title, hasNext, onSelectEpisode, playlist, saveProgress, startPosition])
+  }, [currentIndex, episode.title, hasNext, isRemote, onSelectEpisode, playlist, saveProgress, startPosition])
 
   // 字幕：只在命中的 cue 变化时才 setState，避免每帧重渲染
   useEffect(() => {
@@ -522,6 +537,7 @@ export function PlayerScreen({
           <button onClick={() => void pickSubtitle()}>
             字幕 {subtitleName === null ? '未加载' : ''}
           </button>
+          {!isRemote && <button onClick={() => void openExternal()}>外部播放</button>}
           <button onClick={onExit}>返回</button>
         </div>
       </div>
