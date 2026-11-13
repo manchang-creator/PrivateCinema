@@ -806,6 +806,21 @@ select {
 .rail > * {
   scroll-snap-align: start;
 }
+
+/* P2 货架分档：货架卡固定宽度，首个热门区放大一档，密度对比更清楚 */
+.rail .media-card {
+  flex: none;
+  width: 146px;
+}
+.rail.rail-lg .media-card {
+  width: 208px;
+}
+.rail.rail-lg .poster {
+  border-radius: 14px;
+}
+.rail.rail-lg .media-title {
+  font-size: 14.5px;
+}
 .rail.fade-left {
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 32px, #000 100%);
   mask-image: linear-gradient(90deg, transparent 0, #000 32px, #000 100%);
@@ -1942,6 +1957,12 @@ select {
   }
   .hero-poster {
     width: 150px;
+  }
+  .rail .media-card {
+    width: 130px;
+  }
+  .rail.rail-lg .media-card {
+    width: 168px;
   }
   .detail-hero {
     flex-direction: column;

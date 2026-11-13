@@ -429,13 +429,16 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
 
       {mode === 'home' && home !== null && (
         <div>
-          {home.sections.map((section) => (
+          {home.sections.map((section, index) => (
             <section key={section.id} className="section remote-section">
               <div className="section-head">
                 <h2 className="section-title">{section.title}</h2>
                 {section.subtitle !== '' && <span className="section-en">{section.subtitle}</span>}
               </div>
-              <Rail>{section.cards.map(renderCard)}</Rail>
+              {/* P2 货架分档：首个热门区用大卡，其余用标准卡 */}
+              <Rail className={index === 0 ? 'rail-lg' : undefined}>
+                {section.cards.map(renderCard)}
+              </Rail>
             </section>
           ))}
         </div>

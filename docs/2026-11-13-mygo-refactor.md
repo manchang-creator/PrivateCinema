@@ -266,7 +266,7 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 - **P0 全幅 banner Hero**：`.hero` 用 `width:100vw; margin-left: calc(-50vw + 50%)` 跳出 `.screen-inner` 的 1320 栅格，铺满视口；高度 `clamp(430px, 68vh, 640px)`；内边距 `max(44px, 50vw-660px)` 让内容仍对齐主栅格。`.screen` 加 `overflow-x:hidden` 裁掉 1vw 溢出。
 - **P1 单集信息平衡**：`.detail-hero` 改 `align-items: stretch`，`.detail-actions` 用 `margin-top:auto` 推到底 —— 简介为空时操作行与海报底对齐，右栏不再一头沉。
 - **P1 在线工具栏合并**：`OnlineLibrary` 把「片源 / 搜索 / 分类」压进同一行 `.online-toolbar`（窄屏自动换行），去掉第二行。
-- **P2 Hero 轮播 + 网格分档**：`LibraryScreen` 与 `OnlineLibrary` 增加 `heroIndex` 状态 + 6.5–7s `setInterval` 轮播（`hero-inner` 以 `key` 触发 `hero-crossfade` 交叉淡入）；本地新增 `.hero-pager` 指示点，在线用快速缩略条点选。`media-grid` 卡片基础档 158→168px，`@media(min-width:1420px)` 再放大到 188px。
+- **P2 Hero 轮播 + 网格/货架分档**：`LibraryScreen` 与 `OnlineLibrary` 增加 `heroIndex` 状态 + 6.5–7s `setInterval` 轮播（`hero-inner` 以 `key` 触发 `hero-crossfade` 交叉淡入）；本地新增 `.hero-pager` 指示点，在线用快速缩略条点选。`media-grid` 卡片基础档 158→168px，`@media(min-width:1420px)` 再放大到 188px。在线分区货架也分档：首个热门区 `Rail.rail-lg` 用 208px 大卡，其余 146px 标准卡（窄屏 168/130），密度对比更清楚。
 - **P3 窄屏封面铺底**：`@media(max-width:620px)` 不再 `display:none` 海报，而是 `position:absolute; inset:0` 铺满整幅、`opacity:.5` 做背景，底部长渐变压暗，文字压在封面之上。
 - 附带修复：`.display-popover` 始终深色但此前继承浅色主题的深色文字（深底深字），现局部钉住深色变量。
 
@@ -274,4 +274,4 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 
 - `bash desktop/scripts/mygo-smoke.sh` → `[PASS]`
 - `bash desktop/scripts/local-e2e.sh` → `[PASS]`
-- 截图：`docs/ui-redesign/v2-{local,detail,online,hongguo,light}.png`（e2e 播种 9 部真机 1280×800）；`v2-narrow-560.png`（560px 无头 Chrome 渲染同一份 `dist` CSS，验证 P3 封面铺底）。
+- 截图：`docs/ui-redesign/v2-{local,detail,online,hongguo,light,rails}.png`（e2e 播种 9 部真机 1280×800）；`v2-narrow-560.png`（560px 无头 Chrome 渲染同一份 `dist` CSS，验证 P3 封面铺底）。
