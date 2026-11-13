@@ -1,27 +1,22 @@
-// ==================== 封面色板 ====================
-// 参考 cezzu 的 CoverColorPalette：整页底色由「当前主推内容」的封面色相驱动，
-// 后续的玻璃表面都是白色透明叠色，所以只需要给出一个色相 h。
-// 关键约束：所有大面积底色（整页环境光 / Hero / 详情弹层）的色相都收进一个窄的
-// 冷色区间（蓝—靛），避免随着轮播/标题散列在粉、绿、黄之间乱跳，造成「配色不协调」。
+// ==================== 封面底纹与氛围光 ====================
+// 缺图封面用「标题散列 → 冷色区间渐变」兜底，避免整片蒙版灰。
+// 另一条线是主题色：首页主推的封面主色会通过 --accent-* 变量接管整屏强调色
+// （播放按钮、进度、选中态），这是 B 站 / 腾讯视频都在用的「内容决定色调」效果。
 
 import type { CSSProperties } from 'react'
 
 export function hueOf(seed: string): number {
   let hue = 200
   for (const ch of seed) hue = (hue * 31 + (ch.codePointAt(0) ?? 0)) % 360
-  // 偏冷紫的基准，避免落到刺眼的黄绿区
-  return (hue + 210) % 360
+  return hue
 }
 
-/**
- * 把标题散列出的色相收进一个窄的冷色区间（默认 214°–260°，蓝到靛）。
- * 这样即便 Hero 每 6.5s 轮播换片，整屏色温也只在很小的范围里微动，不会忽然变粉变绿。
- */
-function coolHue(seed: string, lo = 214, span = 46): number {
+/** 收进窄冷色区间（蓝—靛），轮播换片时整屏色温只微动，不会忽粉忽绿。 */
+export function coolHue(seed: string, lo = 214, span = 46): number {
   return lo + (hueOf(seed) % span)
 }
 
-/** 整页环境光：克制的冷调辉光，低饱和、低透明，深浅主题都靠它统一基调。 */
+/** 整页环境光：克制的冷调辉光，深浅主题都靠它统一基调。 */
 export function ambientVars(seed: string): CSSProperties {
   const h = coolHue(seed)
   return {
@@ -32,7 +27,19 @@ export function ambientVars(seed: string): CSSProperties {
   } as CSSProperties
 }
 
-/** 无海报时的封面渐变（monogram 底），色相同样收进冷色区间，整体不跑荧光色。 */
+/** 主题色：由当前主推内容驱动 --accent / --accent-strong / --accent-soft。 */
+export function accentVars(seed: string, dark = true): CSSProperties {
+  const h = coolHue(seed, 208, 96)
+  return {
+    '--accent-h': String(h),
+    '--accent': `hsl(${h}, ${dark ? 82 : 74}%, ${dark ? 64 : 48}%)`,
+    '--accent-strong': `hsl(${h}, ${dark ? 88 : 80}%, ${dark ? 72 : 40}%)`,
+    '--accent-soft': `hsla(${h}, ${dark ? 80 : 70}%, ${dark ? 62 : 50}%, ${dark ? 0.16 : 0.12})`,
+    '--accent-line': `hsla(${h}, 80%, ${dark ? 62 : 46}%, 0.45)`,
+  } as CSSProperties
+}
+
+/** 无海报时的封面渐变底纹。 */
 export function posterGradient(seed: string): CSSProperties {
   const h = coolHue(seed, 206, 76)
   return {
@@ -40,15 +47,16 @@ export function posterGradient(seed: string): CSSProperties {
   }
 }
 
-/**
- * 详情弹层的主题化底色：只下发色相变量，具体渐变交给 CSS 按当前主题（深/浅）生成。
- * 早前这里直接返回一段深色渐变，会以内联样式盖掉浅色主题的浅底，
- * 结果「深底 + 深字」把简介和选集全糊住，看不清。改用变量后深浅两套都能自适应。
- */
+/** 详情页主题化底色：只下发色相变量，深浅两套渐变交给 CSS。 */
 export function backdropGradient(seed: string): CSSProperties {
   const h = coolHue(seed)
   return {
     '--detail-hue': String(h),
     '--detail-hue-2': String((h + 40) % 360),
   } as CSSProperties
+}
+
+/** 四个字以上的标题才能摆成「竖排片名」海报，两个字的容易撑不满。 */
+export function canStackTitle(title: string): boolean {
+  return Array.from(title.trim()).length >= 3
 }

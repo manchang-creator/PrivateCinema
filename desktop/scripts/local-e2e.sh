@@ -138,15 +138,18 @@ ok "前端桥接就绪"
 # ---- 1. 播种片库（绕过原生对话框，走真实扫描/授权） ----------------------
 log "播种片库"
 js "window.__MP4='$MP4'; window.cinema.pickVideos=()=>globalThis.mygo.call('Cinema.SeedPaths',[window.__MP4]); 'patched'" >/dev/null
+# 先进入「片库」页（导出按钮在那里）
+js "(()=>{const b=[...document.querySelectorAll('.sidebar-item')].find(x=>x.innerText.trim()==='片库'); if(!b) return 'no-nav'; b.click(); return 'clicked';})()" | grep -q clicked || fail "未找到「片库」导航"
+A wait --settle --timeout 5s >/dev/null 2>&1 || true
 js "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='选择文件'); if(!b) return 'no-btn'; b.click(); return 'clicked';})()" | grep -q clicked || fail "未找到「选择文件」按钮"
 A wait --settle --timeout 8s >/dev/null 2>&1 || true
-has_text "document.querySelector('.media-grid')?.innerText || ''" "E2E 演示片" "片库卡片"
+has_text "document.querySelector('.poster-grid')?.innerText || ''" "E2E 演示片" "片库卡片"
 A screenshot "$OUT_DIR/1-library.png" >/dev/null || fail "截图失败(片库)"
 ok "截图: $OUT_DIR/1-library.png"
 
 # ---- 2. 打开详情弹层 → 点击单集 → 进入播放页 ----------------------------
 log "进入播放页"
-js "(()=>{const c=document.querySelector('.media-card'); if(!c) return 'no-card'; c.click(); return 'clicked';})()" | grep -q clicked || fail "未找到片库卡片"
+js "(()=>{const c=document.querySelector('.poster-grid .pcard-main'); if(!c) return 'no-card'; c.click(); return 'clicked';})()" | grep -q clicked || fail "未找到片库卡片"
 A wait --settle --timeout 5s >/dev/null 2>&1 || true
 js "(()=>{const b=document.querySelector('.episode-button'); if(!b) return 'no-ep'; b.click(); return 'clicked';})()" | grep -q clicked || fail "未找到单集按钮"
 js "!!document.querySelector('.player-screen')" | grep -q true || fail "播放页未出现"
@@ -167,10 +170,10 @@ ok "截图: $OUT_DIR/2-player-subtitle.png"
 log "校验弹幕层"
 js "!!document.querySelector('.danmaku-canvas')" | grep -q true || fail "未找到弹幕 canvas"
 ok "弹幕 canvas 已挂载"
-has_text "(()=>{const b=document.querySelector('.player-cluster .icon-btn'); return (b&&b.classList.contains('on'))?'弹幕 开':'弹幕 关';})()" "弹幕 开" "弹幕开关初始态"
-js "(()=>{const b=document.querySelector('.player-cluster .icon-btn'); b&&b.click(); return true;})()" >/dev/null
-has_text "(()=>{const b=document.querySelector('.player-cluster .icon-btn'); return (b&&b.classList.contains('on'))?'弹幕 开':'弹幕 关';})()" "弹幕 关" "弹幕开关切换后"
-js "(()=>{const b=document.querySelector('.player-cluster .icon-btn'); b&&b.click(); return true;})()" >/dev/null
+has_text "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); return (b&&b.classList.contains('on'))?'弹幕 开':'弹幕 关';})()" "弹幕 开" "弹幕开关初始态"
+js "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); b&&b.click(); return true;})()" >/dev/null
+has_text "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); return (b&&b.classList.contains('on'))?'弹幕 开':'弹幕 关';})()" "弹幕 关" "弹幕开关切换后"
+js "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); b&&b.click(); return true;})()" >/dev/null
 ok "弹幕开关可切换"
 
 # ---- 5. 续播：退出时落盘 → 片库「继续观看」→ 恢复播放 --------------------
@@ -178,18 +181,24 @@ log "校验退出续播"
 js "(()=>{const v=document.querySelector('.player-video'); v.currentTime=42.0; return v.currentTime;})()" >/dev/null
 sleep 1
 # 点击返回触发卸载清理 → saveProgress
+# 控制层 2.4s 无操作会自动隐藏：先把鼠标"动"一下把它唤回来
+js "(()=>{document.querySelector('.player-screen')?.dispatchEvent(new MouseEvent('mousemove',{bubbles:true})); return 'woke';})()" >/dev/null
+sleep 0.6
 js "(()=>{const b=document.querySelector('.player-back'); if(!b) return 'no-back'; b.click(); return 'clicked';})()" | grep -q clicked || fail "未找到返回按钮"
 A wait --settle --timeout 8s >/dev/null 2>&1 || true
 js "!!document.querySelector('.player-screen')" | grep -q false || fail "未返回片库"
 js "window.__p=-1; globalThis.mygo.call('Cinema.ListProgress').then(l=>window.__p=(l&&l[0]&&l[0].position)||0).catch(()=>{}); 'asked'" >/dev/null
-has_text "document.body.innerText" "继续观看" "片库继续观看"
+# 回到首页：返回后当前路由是详情页，首页的「继续观看」货架在那里
+js "(()=>{const b=[...document.querySelectorAll('.sidebar-item')].find(x=>x.innerText.trim()==='首页'); if(!b) return 'no-nav'; b.click(); return 'clicked';})()" | grep -q clicked || fail "未找到「首页」导航"
+A wait --settle --timeout 8s >/dev/null 2>&1 || true
+has_text "document.body.innerText" "继续观看" "首页继续观看"
 # 校验进度记录已落盘且位置≈42
 poll_num "window.__p||0" gt 40 "progress.position(s)"
 A screenshot "$OUT_DIR/3-library-continue.png" >/dev/null || fail "截图失败(继续观看)"
 ok "截图: $OUT_DIR/3-library-continue.png"
 
-# 点击「继续观看」卡片主体（.cw-main 是播放按钮，.cw-card 是含移除按钮的容器）→ 应从 42s 恢复
-js "(()=>{const c=document.querySelector('.cw-main'); if(!c) return 'no-card'; c.click(); return 'clicked';})()" | grep -q clicked || fail "未找到继续观看卡片"
+# 点击「继续观看」卡片主体（.pcard-main 是播放按钮，.pcard 是含移除按钮的容器）→ 应从 42s 恢复
+js "(()=>{const c=document.querySelector('.rail .pcard-main') || document.querySelector('.pcard-main'); if(!c) return 'no-card'; c.click(); return 'clicked';})()" | grep -q clicked || fail "未找到继续观看卡片"
 poll_num "document.querySelector('.player-video')?.duration || 0" gt 60 "恢复后 duration(s)"
 sleep 1
 poll_num "document.querySelector('.player-video')?.currentTime || 0" gt 40 "续播起点 currentTime(s)"

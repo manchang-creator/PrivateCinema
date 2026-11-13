@@ -92,20 +92,38 @@ has() { printf '%s' "$2" | grep -q -- "$1" || fail "页面缺少文案: $1"; ok 
 eq "document.title" "$(A eval 'document.title')" "PrivateCinema"
 
 BODY="$(A eval 'document.body.innerText')"
-has "本地片库" "$BODY"
-has "在线片库" "$BODY"
+# 侧栏一级导航（B 站式左侧常驻导航）
+has "首页" "$BODY"
+has "片库" "$BODY"
+has "追剧" "$BODY"
+has "搜索" "$BODY"
+has "设置" "$BODY"
 
-# 切到「在线片库」，校验两个片源分区出现
-A eval "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='在线片库');if(!b)return false;b.click();return true;})()" \
-  | grep -q true || fail "未找到「在线片库」标签"
-A wait --settle --timeout 8s >/dev/null 2>&1 || true
+# 首页在线货架：等首屏 section 渲染出来
+A wait --settle --timeout 10s >/dev/null 2>&1 || true
+HOME_TEXT="$(A eval 'document.querySelector(".home")?.innerText || ""')"
+printf '%s' "$HOME_TEXT" | grep -q -- "大家都在看\|热门\|推荐" || fail "首页在线货架未渲染: $HOME_TEXT"
+ok "首页在线货架已渲染"
+
+# 切到「片库」页（本地片库）
+A eval "(()=>{const b=[...document.querySelectorAll('.sidebar-item')].find(x=>x.innerText.trim()==='片库');if(!b)return false;b.click();return true;})()" \
+  | grep -q true || fail "未找到「片库」导航"
+A wait --settle --timeout 6s >/dev/null 2>&1 || true
+LIB="$(A eval 'document.querySelector(".page")?.innerText || ""')"
+printf '%s' "$LIB" | grep -q -- "片库还是空的\|选择文件" || fail "片库页未渲染: $LIB"
+ok "片库页已渲染"
+
+# 切到「搜索」页，校验在线片源切换按钮（看剧AI / 红果短剧）
+A eval "(()=>{const b=[...document.querySelectorAll('.sidebar-item')].find(x=>x.innerText.trim()==='搜索');if(!b)return false;b.click();return true;})()" \
+  | grep -q true || fail "未找到「搜索」导航"
+A wait --settle --timeout 6s >/dev/null 2>&1 || true
 BODY2="$(A eval 'document.body.innerText')"
 has "看剧AI" "$BODY2"
 has "红果短剧" "$BODY2"
 
-# 切回「本地片库」
-A eval "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='本地片库');if(b)b.click();return true;})()" >/dev/null
-A wait --settle --timeout 5s >/dev/null 2>&1 || true
+# 回到首页
+A eval "(()=>{const b=[...document.querySelectorAll('.sidebar-item')].find(x=>x.innerText.trim()==='首页');if(b)b.click();return true;})()" >/dev/null
+A wait --settle --timeout 6s >/dev/null 2>&1 || true
 
 # ---- 截图 -----------------------------------------------------------------
 mkdir -p "$(dirname "$OUT")"

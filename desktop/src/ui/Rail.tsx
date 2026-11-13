@@ -1,12 +1,13 @@
 // ==================== 横向货架 ====================
-// 隐藏原生滚动条，纵向滚轮映射为横向翻动，左右渐隐 + 悬浮箭头提示翻页。
-// 首页「继续观看」与在线分区货架共用。
+// 隐藏原生滚动条，纵向滚轮映射为横向翻动，左右渐隐 + 悬浮箭头翻页。
+// 大卡区常显箭头并自动轮播（B 站首页的做法），鼠标悬浮或键盘聚焦时暂停。
 
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type JSX,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
@@ -18,11 +19,12 @@ interface Props {
   className?: string
   /** 常显左右翻页按钮（大卡区用），到两端时对应按钮置灰 */
   alwaysNav?: boolean
-  /** 自动轮播间隔（毫秒）。到末尾回环到起点，鼠标悬浮时暂停。大卡区用 */
+  /** 自动轮播间隔（毫秒）。到末尾回环到起点，鼠标悬浮时暂停 */
   autoPlayMs?: number
+  style?: CSSProperties
 }
 
-export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX.Element {
+export function Rail({ children, className, alwaysNav, autoPlayMs, style }: Props): JSX.Element {
   const scroller = useRef<HTMLDivElement>(null)
   const [reach, setReach] = useState({ left: false, right: false, overflow: false })
 
@@ -47,7 +49,7 @@ export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const el = scroller.current
     if (el === null) return
-    const timer = setInterval(() => {
+    const timer = window.setInterval(() => {
       if (el.matches(':hover') || el.contains(document.activeElement)) return
       const max = el.scrollWidth - el.clientWidth
       if (max <= 1) return
@@ -57,7 +59,7 @@ export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX
         el.scrollBy({ left: el.clientWidth * 0.9, behavior: 'smooth' })
       }
     }, autoPlayMs)
-    return () => clearInterval(timer)
+    return () => window.clearInterval(timer)
   }, [autoPlayMs])
 
   useEffect(() => {
@@ -69,6 +71,7 @@ export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX
     return () => observer.disconnect()
   }, [sync, children])
 
+  // 纵向滚轮 → 横向翻动；到两端时把事件交还页面，不锁纵向滚动
   useEffect(() => {
     const el = scroller.current
     if (el === null) return
@@ -107,16 +110,17 @@ export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX
   )
 
   const fadeClass = `${reach.left ? ' fade-left' : ''}${reach.right ? ' fade-right' : ''}`
-  const showPrev = alwaysNav ? reach.overflow : reach.left
-  const showNext = alwaysNav ? reach.overflow : reach.right
+  const showPrev = alwaysNav === true ? reach.overflow : reach.left
+  const showNext = alwaysNav === true ? reach.overflow : reach.right
 
   return (
-    <div className={alwaysNav ? 'rail-wrap nav-always' : 'rail-wrap'}>
+    <div className={alwaysNav === true ? 'rail-wrap nav-always' : 'rail-wrap'}>
       <div
         className={`rail${fadeClass}${className !== undefined ? ` ${className}` : ''}`}
         ref={scroller}
         onScroll={sync}
         onKeyDown={handleKeyDown}
+        style={style}
       >
         {children}
       </div>
@@ -142,6 +146,25 @@ export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX
           <Icon name="chevron-right" size={20} />
         </button>
       )}
+    </div>
+  )
+}
+
+/** 分区标题：中文主标题 + 英文小字 + 右侧「更多」。 */
+export function SectionHead({
+  title,
+  sub,
+  action,
+}: {
+  title: string
+  sub?: string
+  action?: ReactNode
+}): JSX.Element {
+  return (
+    <div className="section-head">
+      <h2 className="section-title">{title}</h2>
+      {sub !== undefined && sub !== '' && <span className="section-sub">{sub}</span>}
+      {action !== undefined && <div className="section-action">{action}</div>}
     </div>
   )
 }

@@ -1,6 +1,11 @@
 // ==================== 播放页 ====================
 // 主链路：视频解码 → 字幕叠加 → 弹幕渲染 → 进度续播。
 // 时间轴只有一个真相源：`<video>` 元素。字幕与弹幕都读它，不各自计时。
+//
+// 控制层参考 B 站播放器：
+//   - 底部一条：播放/暂停、上一集/下一集、音量、时间、进度、倍速、弹幕、字幕、线路、全屏；
+//   - 顶部只在悬浮时出现（标题 + 返回 + 选集抽屉），不挡画面；
+//   - 鼠标静止 2.4s 自动隐藏控制层与光标，播放页永远深色，不受浅色主题影响。
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
 import Hls from 'hls.js'
@@ -23,6 +28,7 @@ import {
 } from '@private-cinema/core/danmaku'
 import { cueAt, parseSubtitle, type SubtitleCue } from '@private-cinema/core/subtitle'
 import { formatTime } from '@private-cinema/core/ui'
+import { useAutoNext, usePlayerMuted, usePlayerRate, usePlayerVolume } from '../lib/store'
 import { Icon } from '../ui/icons'
 
 interface Props {
@@ -37,6 +43,7 @@ interface Props {
 
 /** 进度落盘间隔（秒）：过密会频繁写盘，过疏会丢进度。 */
 const SAVE_INTERVAL = 5
+const RATES: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
 
 export function PlayerScreen({
   media,
@@ -61,12 +68,22 @@ export function PlayerScreen({
   const [anchor, setAnchor] = useState(startPosition)
   const [showSettings, setShowSettings] = useState(false)
   const [showBrightness, setShowBrightness] = useState(false)
+  const [showPlaylist, setShowPlaylist] = useState(false)
+  const [showRate, setShowRate] = useState(false)
+  const [chrome, setChrome] = useState(true)
+  const idleTimer = useRef<number>(0)
   // null = 尚未读回（读取中）；[] = 确实一台都没有。两者不可混为一谈。
   const [displays, setDisplays] = useState<DisplayBrightness[] | null>(null)
   const [brightnessError, setBrightnessError] = useState<string | null>(null)
 
+  // 播放器记忆：音量 / 静音 / 倍速跨会话保留
+  const [volume, setVolume] = usePlayerVolume()
+  const [muted, setMuted] = usePlayerMuted()
+  const [rate, setRate] = usePlayerRate()
+  const [autoNext] = useAutoNext()
+  const [fullscreen, setFullscreen] = useState(false)
+
   // 在线片源：按集 token 现解析播放地址。null 表示自动选线。
-  // 红果走 hongguo 适配器，其余远端（含看剧AI）默认 kanju。
   const remoteProvider = episode.source === 'hongguo' ? 'hongguo' : 'kanju'
   const isRemote =
     episode.source === 'kanju' || episode.source === 'hongguo' || (episode.episodeToken ?? '') !== ''
@@ -135,7 +152,6 @@ export function PlayerScreen({
     }
   }, [src, playbackKind])
 
-
   // 红果有真实弹幕：进入/切换分集时异步拉取；拿不到再回退演示弹幕。
   const [remoteDanmaku, setRemoteDanmaku] = useState<DanmakuItem[]>([])
   useEffect(() => {
@@ -158,16 +174,10 @@ export function PlayerScreen({
 
   // 演示弹幕兜底：本地/其它片源或红果拉不到时，按 episodeId 生成确定性分布。
   const danmakuItems = useMemo(
-    () =>
-      remoteDanmaku.length > 0
-        ? remoteDanmaku
-        : seedDanmaku(media.id, episode.id, duration),
+    () => (remoteDanmaku.length > 0 ? remoteDanmaku : seedDanmaku(media.id, episode.id, duration)),
     [remoteDanmaku, media.id, episode.id, duration],
   )
-  const visibleDanmaku = useMemo(
-    () => filterItems(danmakuItems, settings),
-    [danmakuItems, settings],
-  )
+  const visibleDanmaku = useMemo(() => filterItems(danmakuItems, settings), [danmakuItems, settings])
 
   const currentIndex = playlist.findIndex((item) => item.id === episode.id)
   const hasPrev = currentIndex > 0
@@ -194,8 +204,6 @@ export function PlayerScreen({
     [media.id, media.title, episode.id, episode.index, episode.title],
   )
 
-  // ==================== 换集 / 卸载时保存 ====================
-
   useEffect(() => {
     const video = videoRef.current
     return () => {
@@ -212,17 +220,14 @@ export function PlayerScreen({
     setCues([])
     setSubtitleName(null)
     setCurrentCue(null)
-
     // 在线片源没有本地同名字幕，跳过文件查找。
     if (isRemote) return
-
     void (async () => {
       const found = await window.cinema.findSubtitle(episode.filePath)
       if (cancelled || found === null) return
       setSubtitleName(found.name)
       setCues(parseSubtitle(found.content))
     })()
-
     return () => {
       cancelled = true
     }
@@ -283,11 +288,15 @@ export function PlayerScreen({
     const onEnded = (): void => {
       setPlaying(false)
       saveProgress(video.duration, video.duration)
-      if (hasNext) onSelectEpisode(playlist[currentIndex + 1])
+      if (hasNext && autoNext) {
+        onSelectEpisode(playlist[currentIndex + 1])
+        return
+      }
+      if (hasNext) setShowPlaylist(true)
     }
     const onError = (): void => {
       // 把 <video> 的真实错误码带出来。桌面端最常见的失败是容器/编码不被 Chromium 支持
-      // （MEDIA_ERR_SRC_NOT_SUPPORTED = 4，例如 MKV 的某些音轨），只显示片名无法定位。
+      // （MEDIA_ERR_SRC_NOT_SUPPORTED = 4），只显示片名无法定位。
       const code = video?.error?.code ?? 0
       const detail =
         code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
@@ -318,7 +327,26 @@ export function PlayerScreen({
       video.removeEventListener('ended', onEnded)
       video.removeEventListener('error', onError)
     }
-  }, [currentIndex, episode.title, hasNext, isRemote, onSelectEpisode, playlist, saveProgress, startPosition])
+  }, [
+    autoNext,
+    currentIndex,
+    episode.title,
+    hasNext,
+    isRemote,
+    onSelectEpisode,
+    playlist,
+    saveProgress,
+    startPosition,
+  ])
+
+  // 音量 / 静音 / 倍速：记忆值回灌到 video
+  useEffect(() => {
+    const video = videoRef.current
+    if (video === null) return
+    video.volume = Math.max(0, Math.min(1, volume))
+    video.muted = muted
+    video.playbackRate = rate
+  }, [volume, muted, rate, resolvedSrc])
 
   // 字幕：只在命中的 cue 变化时才 setState，避免每帧重渲染
   useEffect(() => {
@@ -349,7 +377,10 @@ export function PlayerScreen({
   const seekBy = useCallback((delta: number) => {
     const video = videoRef.current
     if (video === null) return
-    video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta))
+    video.currentTime = Math.max(
+      0,
+      Math.min(video.duration || 0, video.currentTime + delta),
+    )
   }, [])
 
   const seekTo = useCallback((value: number) => {
@@ -360,7 +391,18 @@ export function PlayerScreen({
     setPosition(value)
   }, [])
 
-  // 键盘：空格播放 / ←→ 快退快进 / F 全屏
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement === null) void document.documentElement.requestFullscreen()
+    else void document.exitFullscreen()
+  }, [])
+
+  useEffect(() => {
+    const onChange = (): void => setFullscreen(document.fullscreenElement !== null)
+    document.addEventListener('fullscreenchange', onChange)
+    return () => document.removeEventListener('fullscreenchange', onChange)
+  }, [])
+
+  // 键盘：空格播放 / ←→ 快退快进 / ↑↓ 音量 / F 全屏 / M 静音 / Esc 返回
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (event.target instanceof HTMLInputElement) return
@@ -375,9 +417,21 @@ export function PlayerScreen({
         case 'ArrowRight':
           seekBy(5)
           break
+        case 'ArrowUp':
+          event.preventDefault()
+          setVolume(Math.min(1, Number((volume + 0.05).toFixed(2))))
+          break
+        case 'ArrowDown':
+          event.preventDefault()
+          setVolume(Math.max(0, Number((volume - 0.05).toFixed(2))))
+          break
         case 'f':
         case 'F':
-          void document.documentElement.requestFullscreen()
+          toggleFullscreen()
+          break
+        case 'm':
+        case 'M':
+          setMuted(!muted)
           break
         default:
           break
@@ -385,7 +439,27 @@ export function PlayerScreen({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [seekBy, togglePlay])
+  }, [seekBy, togglePlay, toggleFullscreen, volume, muted, setVolume, setMuted])
+
+  // 鼠标静止 → 收起控制层（暂停时始终显示）
+  const wake = useCallback(() => {
+    setChrome(true)
+    window.clearTimeout(idleTimer.current)
+    idleTimer.current = window.setTimeout(() => {
+      setChrome(false)
+      setShowRate(false)
+    }, 2400)
+  }, [])
+
+  useEffect(() => {
+    if (!playing) {
+      setChrome(true)
+      window.clearTimeout(idleTimer.current)
+      return
+    }
+    wake()
+    return () => window.clearTimeout(idleTimer.current)
+  }, [playing, wake])
 
   const updateSettings = useCallback((patch: Partial<DanmakuSettings>) => {
     setSettings((previous) => {
@@ -400,8 +474,7 @@ export function PlayerScreen({
   // 挂在挂载阶段会拖慢进播放页。
 
   const openBrightness = useCallback(() => {
-    // 不把副作用写进 setState 的 updater —— StrictMode 下 updater 会被重复调用，
-    // 等于每次开面板都发两遍 DDC/CI 枚举。
+    // 不把副作用写进 setState 的 updater —— StrictMode 下 updater 会被重复调用。
     if (showBrightness) {
       setShowBrightness(false)
       return
@@ -419,11 +492,8 @@ export function PlayerScreen({
   }, [showBrightness])
 
   /**
-   * 每台显示器最多一个写入在途。
-   * DDC/CI 写一次要上百毫秒（i2c 往返），sysfs 虽然快但同样不接受逐帧直写；
-   * 而拖动滑块产生事件的速度远高于硬件吞吐。逐个排队会让 IPC 队列越堆越长、
-   * 窗口跟着卡。这里只保留「最新值」：在途写完后补发最后那个值，中间值直接丢弃 ——
-   * 用户要的永远是松手时的亮度。节流节奏由硬件真实速度决定，不猜固定间隔。
+   * 每台显示器最多一个写入在途。DDC/CI 写一次要上百毫秒，而拖动滑块的速度远高于
+   * 硬件吞吐，队列会越堆越长。这里只保留「最新值」：在途写完后补发最后那个值。
    */
   const writesRef = useRef(new Map<string, { inFlight: boolean; pending: number | null }>())
 
@@ -443,15 +513,12 @@ export function PlayerScreen({
       })
       .finally(() => {
         slot.inFlight = false
-        // 拖动期间攒下的最新值在这里补发；microtask 里回调，不会累积调用栈。
         flushBrightness(id)
       })
   }, [])
 
   const changeBrightness = useCallback(
     (id: string, value: number) => {
-      // 滑块立刻跟手；写硬件交给 flushBrightness 节流。写失败不把滑块弹回去，
-      // 否则拖动过程会被慢速 DDC/CI 拉成锯齿。
       setDisplays((previous) =>
         previous === null
           ? previous
@@ -467,17 +534,22 @@ export function PlayerScreen({
     [flushBrightness],
   )
 
-  const playedPercent =
-    duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0
+  const playedPercent = duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0
+  const controlsVisible = chrome && !resolving && error === null
 
   return (
-    <div className="player-screen">
-      <div className="player-stage">
+    <div
+      className={chrome ? 'player-screen' : 'player-screen idle'}
+      onMouseMove={wake}
+      onMouseLeave={() => setChrome(false)}
+    >
+      <div className={controlsVisible ? 'player-stage' : 'player-stage bare'}>
         <video
           ref={videoRef}
           src={playbackKind === 'hls' || src === '' ? undefined : src}
           className="player-video"
           onClick={togglePlay}
+          onDoubleClick={toggleFullscreen}
         />
 
         {settings.enabled && (
@@ -502,152 +574,272 @@ export function PlayerScreen({
 
         {resolving && <div className="player-resolving">线路解析中…</div>}
 
-        {error !== null && <div className="player-error">{error}</div>}
+        {error !== null && (
+          <div className="player-error">
+            <Icon name="info" size={18} />
+            <span>{error}</span>
+            {!isRemote && (
+              <button type="button" className="btn-glass small" onClick={() => void openExternal()}>
+                <Icon name="expand" size={14} />
+                外部播放
+              </button>
+            )}
+          </div>
+        )}
 
         {!playing && !resolving && error === null && (
           <button className="player-big-play" onClick={togglePlay} aria-label="播放">
-            <Icon name="play" size={30} />
+            <Icon name="play" size={32} />
           </button>
         )}
       </div>
 
-      {/* 顶部玻璃控制条：返回 + 标题 + 右侧功能簇 */}
-      <div className="player-top">
-        <div className="player-top-left">
-          <button className="player-back" onClick={onExit} aria-label="返回片库">
-            <Icon name="arrow-left" size={18} />
-          </button>
-          <div className="player-top-title">
-            <b>{media.title}</b>
-            <span>{episode.title}</span>
-          </div>
-        </div>
-
-        <div className="player-cluster">
-          <button
-            className={settings.enabled ? 'icon-btn on' : 'icon-btn'}
-            title={settings.enabled ? '关闭弹幕' : '开启弹幕'}
-            aria-label="弹幕开关"
-            onClick={() => updateSettings({ enabled: !settings.enabled })}
-          >
-            <Icon name="danmaku" size={17} />
-          </button>
-          <button
-            className={showSettings ? 'icon-btn on' : 'icon-btn'}
-            title="弹幕设置"
-            aria-label="弹幕设置"
-            onClick={() => setShowSettings((value) => !value)}
-          >
-            <Icon name="settings" size={17} />
-          </button>
-          <button
-            className={showBrightness ? 'icon-btn on' : 'icon-btn'}
-            title="显示器亮度"
-            aria-label="显示器亮度"
-            onClick={openBrightness}
-          >
-            <Icon name="brightness" size={17} />
-          </button>
-          <button
-            className="icon-btn"
-            title={`字幕：${subtitleName ?? '未加载'}`}
-            aria-label="选择字幕"
-            onClick={() => void pickSubtitle()}
-          >
-            <Icon name="subtitles" size={17} />
-          </button>
-          {isRemote && lines.length > 1 && (
-            <select
-              className="player-line-select"
-              value={selectedLineId ?? 'auto'}
-              onChange={(event) =>
-                setSelectedLineId(event.target.value === 'auto' ? null : event.target.value)
-              }
-              aria-label="播放线路"
-            >
-              <option value="auto">自动线路</option>
-              {lines.map((line) => (
-                <option key={line.id} value={line.id}>
-                  {line.label}
-                </option>
-              ))}
-            </select>
-          )}
-          {!isRemote && (
+      {/* 顶部：返回 + 标题（悬浮显隐） */}
+      {controlsVisible && (
+        <div className="player-top">
+          <div className="player-top-left">
             <button
-              className="icon-btn"
-              title="用系统播放器打开"
-              aria-label="外部播放"
-              onClick={() => void openExternal()}
+              type="button"
+              className="player-back"
+              onClick={onExit}
+              aria-label="返回片库"
+              title="返回片库"
             >
-              <Icon name="expand" size={16} />
+              <Icon name="arrow-left" size={18} />
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* 底部控制层：标题 + 进度 + 播放控制 */}
-      <div className="player-bottom">
-        <div className="player-headline">
-          <b>{media.title}</b>
-          <span>{episode.title}</span>
-        </div>
-
-        <div className="player-scrub">
-          <span className="player-time">{formatTime(position)}</span>
-          <input
-            className="player-progress"
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            value={position}
-            style={{ '--played': `${playedPercent}%` } as CSSProperties}
-            onChange={(event) => seekTo(Number(event.target.value))}
-            aria-label="播放进度"
-          />
-          <span className="player-time">{formatTime(duration)}</span>
-        </div>
-
-        <div className="player-controls">
-          <div className="player-controls-left">
-            <button
-              className="control-btn"
-              disabled={!hasPrev}
-              onClick={() => onSelectEpisode(playlist[currentIndex - 1])}
-            >
-              <Icon name="chevron-left" size={18} />
-              上一集
-            </button>
-            <button
-              className="control-btn primary"
-              onClick={togglePlay}
-              aria-label={playing ? '暂停' : '播放'}
-            >
-              <Icon name={playing ? 'pause' : 'play'} size={20} />
-            </button>
-            <button
-              className="control-btn"
-              disabled={!hasNext}
-              onClick={() => onSelectEpisode(playlist[currentIndex + 1])}
-            >
-              下一集
-              <Icon name="chevron-right" size={18} />
-            </button>
+            <div className="player-top-title">
+              <b>{media.title}</b>
+              <span>{episode.title}</span>
+            </div>
           </div>
 
-          <div className="player-controls-right">
+          <div className="player-cluster">
             <button
-              className="control-btn"
-              onClick={() => void document.documentElement.requestFullscreen()}
-              title="全屏（F）"
+              type="button"
+              className={showPlaylist ? 'icon-btn on' : 'icon-btn'}
+              title="选集"
+              aria-label="选集"
+              onClick={() => setShowPlaylist(!showPlaylist)}
             >
-              <Icon name="expand" size={16} />
-              全屏
+              <Icon name="layers" size={17} />
+              <span>选集</span>
             </button>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* 底部控制条：B 站式一条排开 */}
+      {controlsVisible && (
+        <div className="player-bottom">
+          <div className="player-scrub">
+            <input
+              className="player-progress"
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={position}
+              style={{ '--played': `${playedPercent}%` } as CSSProperties}
+              onChange={(event) => seekTo(Number(event.target.value))}
+              aria-label="播放进度"
+            />
+          </div>
+
+          <div className="player-controls">
+            <div className="player-controls-left">
+              <button
+                type="button"
+                className="control-btn"
+                disabled={!hasPrev}
+                aria-label="上一集"
+                onClick={() => onSelectEpisode(playlist[currentIndex - 1])}
+              >
+                <Icon name="skip-back" size={17} />
+              </button>
+              <button
+                type="button"
+                className="control-btn primary"
+                onClick={togglePlay}
+                aria-label={playing ? '暂停' : '播放'}
+              >
+                <Icon name={playing ? 'pause' : 'play'} size={20} />
+              </button>
+              <button
+                type="button"
+                className="control-btn"
+                disabled={!hasNext}
+                aria-label="下一集"
+                onClick={() => onSelectEpisode(playlist[currentIndex + 1])}
+              >
+                <Icon name="skip-forward" size={17} />
+              </button>
+
+              <div className="player-volume">
+                <button
+                  type="button"
+                  className="control-btn"
+                  aria-label={muted ? '取消静音' : '静音'}
+                  onClick={() => setMuted(!muted)}
+                >
+                  <Icon name={muted || volume === 0 ? 'volume-mute' : 'volume'} size={17} />
+                </button>
+                <input
+                  type="range"
+                  className="volume-range"
+                  min={0}
+                  max={100}
+                  value={Math.round((muted ? 0 : volume) * 100)}
+                  aria-label="音量"
+                  onChange={(event) => {
+                    const next = Number(event.target.value) / 100
+                    setVolume(next)
+                    if (next > 0) setMuted(false)
+                  }}
+                />
+              </div>
+
+              <span className="player-time">
+                {formatTime(position)} <i>/</i> {formatTime(duration)}
+              </span>
+            </div>
+
+            <div className="player-controls-right">
+              <div className="rate-wrap">
+                <button
+                  type="button"
+                  className="control-btn text"
+                  onClick={() => setShowRate(!showRate)}
+                  aria-label="倍速"
+                >
+                  {rate === 1 ? '倍速' : `${rate}x`}
+                </button>
+                {showRate && (
+                  <div className="rate-menu" role="menu">
+                    {RATES.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={rate === value}
+                        className={rate === value ? 'rate-item active' : 'rate-item'}
+                        onClick={() => {
+                          setRate(value)
+                          setShowRate(false)
+                        }}
+                      >
+                        {value === 1 ? '正常' : `${value}x`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {isRemote && lines.length > 1 && (
+                <select
+                  className="player-line-select"
+                  value={selectedLineId ?? 'auto'}
+                  onChange={(event) =>
+                    setSelectedLineId(event.target.value === 'auto' ? null : event.target.value)
+                  }
+                  aria-label="播放线路"
+                >
+                  <option value="auto">自动线路</option>
+                  {lines.map((line) => (
+                    <option key={line.id} value={line.id}>
+                      {line.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <button
+                type="button"
+                className={settings.enabled ? 'control-btn on' : 'control-btn'}
+                title={settings.enabled ? '关闭弹幕' : '开启弹幕'}
+                aria-label="弹幕开关"
+                onClick={() => updateSettings({ enabled: !settings.enabled })}
+              >
+                <Icon name="danmaku" size={17} />
+              </button>
+              <button
+                type="button"
+                className={showSettings ? 'control-btn on' : 'control-btn'}
+                title="弹幕设置"
+                aria-label="弹幕设置"
+                onClick={() => setShowSettings(!showSettings)}
+              >
+                <Icon name="settings" size={17} />
+              </button>
+              <button
+                type="button"
+                className="control-btn"
+                title={`字幕：${subtitleName ?? '未加载'}`}
+                aria-label="选择字幕"
+                onClick={() => void pickSubtitle()}
+              >
+                <Icon name="subtitles" size={17} />
+              </button>
+              <button
+                type="button"
+                className={showBrightness ? 'control-btn on' : 'control-btn'}
+                title="显示器亮度"
+                aria-label="显示器亮度"
+                onClick={openBrightness}
+              >
+                <Icon name="brightness" size={17} />
+              </button>
+              {!isRemote && (
+                <button
+                  type="button"
+                  className="control-btn"
+                  title="用系统播放器打开"
+                  aria-label="外部播放"
+                  onClick={() => void openExternal()}
+                >
+                  <Icon name="expand" size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="control-btn"
+                title={fullscreen ? '退出全屏（F）' : '全屏（F）'}
+                aria-label="全屏"
+                onClick={toggleFullscreen}
+              >
+                <Icon name={fullscreen ? 'shrink' : 'expand'} size={17} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 选集抽屉 */}
+      {showPlaylist && (
+        <div className="player-drawer" role="dialog" aria-label="选集">
+          <div className="player-drawer-head">
+            <span>选集</span>
+            <span className="player-drawer-count">共 {playlist.length} 集</span>
+            <button type="button" onClick={() => setShowPlaylist(false)} aria-label="关闭选集">
+              <Icon name="close" size={15} />
+            </button>
+          </div>
+          <div className="player-drawer-grid">
+            {playlist.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={item.id === episode.id ? 'episode-button active' : 'episode-button'}
+                onClick={() => {
+                  onSelectEpisode(item)
+                  setShowPlaylist(false)
+                }}
+              >
+                {item.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {showSettings && (
         <DanmakuSettingsPanel
@@ -688,9 +880,7 @@ function BrightnessPanel({ displays, error, onChange, onClose }: BrightnessPanel
       </div>
 
       {error !== null && <div className="brightness-error">{error}</div>}
-
       {displays === null && <div className="brightness-empty">正在读取显示器…</div>}
-
       {displays !== null && displays.length === 0 && error === null && (
         <div className="brightness-empty">没有检测到显示器</div>
       )}
@@ -808,4 +998,3 @@ function DanmakuSettingsPanel({ settings, onChange, onClose }: PanelProps): JSX.
     </div>
   )
 }
-
