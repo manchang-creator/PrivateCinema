@@ -2,7 +2,7 @@
 // 主链路：视频解码 → 字幕叠加 → 弹幕渲染 → 进度续播。
 // 时间轴只有一个真相源：`<video>` 元素。字幕与弹幕都读它，不各自计时。
 
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react'
 import Hls from 'hls.js'
 import {
   isCompleted,
@@ -22,6 +22,7 @@ import {
 } from '@private-cinema/core/danmaku'
 import { cueAt, parseSubtitle, type SubtitleCue } from '@private-cinema/core/subtitle'
 import { formatTime } from '@private-cinema/core/ui'
+import { Icon } from '../ui/icons'
 
 interface Props {
   media: MediaItem
@@ -442,6 +443,9 @@ export function PlayerScreen({
     [flushBrightness],
   )
 
+  const playedPercent =
+    duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0
+
   return (
     <div className="player-screen">
       <div className="player-stage">
@@ -478,67 +482,146 @@ export function PlayerScreen({
 
         {!playing && !resolving && error === null && (
           <button className="player-big-play" onClick={togglePlay} aria-label="播放">
-            ▶
+            <Icon name="play" size={30} />
           </button>
         )}
       </div>
 
-      <div className="player-bar">
-        <div className="player-title">
-          <span className="player-title-main">{media.title}</span>
-          <span className="player-title-sub">{episode.title}</span>
+      {/* 顶部玻璃控制条：返回 + 标题 + 右侧功能簇 */}
+      <div className="player-top">
+        <div className="player-top-left">
+          <button className="player-back" onClick={onExit} aria-label="返回片库">
+            <Icon name="arrow-left" size={18} />
+          </button>
+          <div className="player-top-title">
+            <b>{media.title}</b>
+            <span>{episode.title}</span>
+          </div>
         </div>
 
-        {isRemote && lines.length > 1 && (
-          <select
-            className="player-line-select"
-            value={selectedLineId ?? 'auto'}
-            onChange={(event) =>
-              setSelectedLineId(event.target.value === 'auto' ? null : event.target.value)
-            }
-            aria-label="播放线路"
+        <div className="player-cluster">
+          <button
+            className={settings.enabled ? 'icon-btn on' : 'icon-btn'}
+            title={settings.enabled ? '关闭弹幕' : '开启弹幕'}
+            aria-label="弹幕开关"
+            onClick={() => updateSettings({ enabled: !settings.enabled })}
           >
-            <option value="auto">自动线路</option>
-            {lines.map((line) => (
-              <option key={line.id} value={line.id}>
-                {line.label}
-              </option>
-            ))}
-          </select>
-        )}
+            <Icon name="danmaku" size={17} />
+          </button>
+          <button
+            className={showSettings ? 'icon-btn on' : 'icon-btn'}
+            title="弹幕设置"
+            aria-label="弹幕设置"
+            onClick={() => setShowSettings((value) => !value)}
+          >
+            <Icon name="settings" size={17} />
+          </button>
+          <button
+            className={showBrightness ? 'icon-btn on' : 'icon-btn'}
+            title="显示器亮度"
+            aria-label="显示器亮度"
+            onClick={openBrightness}
+          >
+            <Icon name="brightness" size={17} />
+          </button>
+          <button
+            className="icon-btn"
+            title={`字幕：${subtitleName ?? '未加载'}`}
+            aria-label="选择字幕"
+            onClick={() => void pickSubtitle()}
+          >
+            <Icon name="subtitles" size={17} />
+          </button>
+          {isRemote && lines.length > 1 && (
+            <select
+              className="player-line-select"
+              value={selectedLineId ?? 'auto'}
+              onChange={(event) =>
+                setSelectedLineId(event.target.value === 'auto' ? null : event.target.value)
+              }
+              aria-label="播放线路"
+            >
+              <option value="auto">自动线路</option>
+              {lines.map((line) => (
+                <option key={line.id} value={line.id}>
+                  {line.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {!isRemote && (
+            <button
+              className="icon-btn"
+              title="用系统播放器打开"
+              aria-label="外部播放"
+              onClick={() => void openExternal()}
+            >
+              <Icon name="expand" size={16} />
+            </button>
+          )}
+        </div>
+      </div>
 
-        <input
-          className="player-progress"
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.1}
-          value={position}
-          onChange={(event) => seekTo(Number(event.target.value))}
-          aria-label="播放进度"
-        />
-
-        <div className="player-time">
-          {formatTime(position)} / {formatTime(duration)}
+      {/* 底部控制层：标题 + 进度 + 播放控制 */}
+      <div className="player-bottom">
+        <div className="player-headline">
+          <b>{media.title}</b>
+          <span>{episode.title}</span>
         </div>
 
-        <div className="player-actions">
-          <button disabled={!hasPrev} onClick={() => onSelectEpisode(playlist[currentIndex - 1])}>
-            上一集
-          </button>
-          <button disabled={!hasNext} onClick={() => onSelectEpisode(playlist[currentIndex + 1])}>
-            下一集
-          </button>
-          <button onClick={() => updateSettings({ enabled: !settings.enabled })}>
-            弹幕 {settings.enabled ? '开' : '关'}
-          </button>
-          <button onClick={() => setShowSettings((value) => !value)}>弹幕设置</button>
-          <button onClick={openBrightness}>亮度</button>
-          <button onClick={() => void pickSubtitle()}>
-            字幕 {subtitleName === null ? '未加载' : ''}
-          </button>
-          {!isRemote && <button onClick={() => void openExternal()}>外部播放</button>}
-          <button onClick={onExit}>返回</button>
+        <div className="player-scrub">
+          <span className="player-time">{formatTime(position)}</span>
+          <input
+            className="player-progress"
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={position}
+            style={{ '--played': `${playedPercent}%` } as CSSProperties}
+            onChange={(event) => seekTo(Number(event.target.value))}
+            aria-label="播放进度"
+          />
+          <span className="player-time">{formatTime(duration)}</span>
+        </div>
+
+        <div className="player-controls">
+          <div className="player-controls-left">
+            <button
+              className="control-btn"
+              disabled={!hasPrev}
+              onClick={() => onSelectEpisode(playlist[currentIndex - 1])}
+            >
+              <Icon name="chevron-left" size={18} />
+              上一集
+            </button>
+            <button
+              className="control-btn primary"
+              onClick={togglePlay}
+              aria-label={playing ? '暂停' : '播放'}
+            >
+              <Icon name={playing ? 'pause' : 'play'} size={20} />
+            </button>
+            <button
+              className="control-btn"
+              disabled={!hasNext}
+              onClick={() => onSelectEpisode(playlist[currentIndex + 1])}
+            >
+              下一集
+              <Icon name="chevron-right" size={18} />
+            </button>
+          </div>
+
+          <div className="player-controls-right">
+            <button
+              className="control-btn"
+              onClick={() => void document.documentElement.requestFullscreen()}
+              title="全屏（F）"
+            >
+              <Icon name="expand" size={16} />
+              全屏
+            </button>
+          </div>
         </div>
       </div>
 

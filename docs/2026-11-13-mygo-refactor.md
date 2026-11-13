@@ -240,3 +240,38 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 
 > 这同时补上了交接文档「阶段二·真实端到端播放」缺口：此前只验证了开窗/在线出图/媒体 Range 单测，
 > 现在本地 mp4+srt 的完整播放-字幕-弹幕-续播链路有了可重复的真机自动化验收。
+
+## 11. 界面重做：参考 cezzu 的「影院液态玻璃」语言
+
+参考项目：[bentx2685/cezzu](https://github.com/bentx2685/cezzu)（原生 iOS/macOS，SwiftUI + Liquid Glass）。
+提炼出的可迁移规律，落到 `desktop/src` 的前端实现：
+
+- **整页底色由主推封面主色驱动**（cezzu `CoverColorPalette.darkened`）：`ambientVars()` 按标题稳定散列出色相，铺三团同相环境光；有真实海报时由海报主导。
+- **表面是白色透明叠色，不是不透明灰**（cezzu `ContentPalette.surface = white.opacity(0.06)`）：`--glass / --glass-strong / --hairline` 三档玻璃变量，配合 `backdrop-filter`。
+- **主操作是单色胶囊**（cezzu `CezzuMonochrome`：深色白底黑字）：`--fill / --on-fill`，主按钮纯白胶囊，次级按钮玻璃胶囊。
+- **一级入口是悬浮玻璃胶囊顶栏**（cezzu `RegularTopBar`）：品牌 + 居中分段胶囊（本地片库/在线片库）+ 右侧图标动作，顶栏后一层影院黑渐变 scrim。
+- **中文标题 + 大写拉丁副标**（`CONTINUE WATCHING` / `LIBRARY` / `RESULTS`）建立层级。
+- **Hero**：左 3:4 相框海报 + 右信息栏（类型/事实 chips、大标题、简介、白色「立即观看」、快速选集缩略条）。
+- **详情弹层 / 播放页**：玻璃层、选集网格、顶部返回 + 右侧功能簇、底部标题 + 白色进度条 + 白色圆形播放主控，均对齐 cezzu 的 PlayerSurface / DetailView 布局。
+
+新增/改动文件：`desktop/src/ui/icons.tsx`（内联线性图标）、`ui/palette.ts`（封面色板/环境光）、`ui/Rail.tsx`（横向货架）、`ui/LibraryScreen.tsx`、`ui/OnlineLibrary.tsx`、`ui/DisplayMenu.tsx`、`player/PlayerScreen.tsx`、`styles.css`（整套 tokens 重写，含浅色主题与播放页固定深色）。
+
+验收：`bash desktop/scripts/mygo-smoke.sh` 输出 `[PASS]`；另用 e2e 播种 9 部作品真机截图：
+`docs/ui-redesign/cezzu-style-{local,detail,continue,online,player,light}.png`。
+
+### 11.1 布局优化（第二轮 P0–P3）
+
+在 §11 视觉语言不变的前提下，按 P0–P3 做了一轮布局打磨，全部落在 `desktop/src`（CSS 为主 + 少量组件状态）：
+
+- **P0 全幅 banner Hero**：`.hero` 用 `width:100vw; margin-left: calc(-50vw + 50%)` 跳出 `.screen-inner` 的 1320 栅格，铺满视口；高度 `clamp(430px, 68vh, 640px)`；内边距 `max(44px, 50vw-660px)` 让内容仍对齐主栅格。`.screen` 加 `overflow-x:hidden` 裁掉 1vw 溢出。
+- **P1 单集信息平衡**：`.detail-hero` 改 `align-items: stretch`，`.detail-actions` 用 `margin-top:auto` 推到底 —— 简介为空时操作行与海报底对齐，右栏不再一头沉。
+- **P1 在线工具栏合并**：`OnlineLibrary` 把「片源 / 搜索 / 分类」压进同一行 `.online-toolbar`（窄屏自动换行），去掉第二行。
+- **P2 Hero 轮播 + 网格分档**：`LibraryScreen` 与 `OnlineLibrary` 增加 `heroIndex` 状态 + 6.5–7s `setInterval` 轮播（`hero-inner` 以 `key` 触发 `hero-crossfade` 交叉淡入）；本地新增 `.hero-pager` 指示点，在线用快速缩略条点选。`media-grid` 卡片基础档 158→168px，`@media(min-width:1420px)` 再放大到 188px。
+- **P3 窄屏封面铺底**：`@media(max-width:620px)` 不再 `display:none` 海报，而是 `position:absolute; inset:0` 铺满整幅、`opacity:.5` 做背景，底部长渐变压暗，文字压在封面之上。
+- 附带修复：`.display-popover` 始终深色但此前继承浅色主题的深色文字（深底深字），现局部钉住深色变量。
+
+验收（本机真机 + 无头 CSS 夹具）：
+
+- `bash desktop/scripts/mygo-smoke.sh` → `[PASS]`
+- `bash desktop/scripts/local-e2e.sh` → `[PASS]`
+- 截图：`docs/ui-redesign/v2-{local,detail,online,hongguo,light}.png`（e2e 播种 9 部真机 1280×800）；`v2-narrow-560.png`（560px 无头 Chrome 渲染同一份 `dist` CSS，验证 P3 封面铺底）。

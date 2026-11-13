@@ -1,7 +1,6 @@
 // ==================== 在线片库（多片源）====================
 // 数据全部经主进程代理（看剧AI 另需签名），这里只负责展示与交互：
-// 片源切换 / 分类/搜索 → 卡片网格 → 详情弹层（选集）→ 交给 App 进入播放。
-// 播放地址不在这里解析：进入播放页后由 PlayerScreen 按集 token 现解析。
+// 片源切换 / 分类/搜索 → Hero + 分区货架 → 详情弹层（选集）→ 交给 App 进入播放。
 
 import {
   REMOTE_PROVIDERS,
@@ -14,7 +13,10 @@ import {
   type RemoteHomeData,
   type RemoteProviderId,
 } from '@private-cinema/core/shared'
-import { useCallback, useEffect, useRef, useState, type JSX, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties, type JSX } from 'react'
+import { Icon } from './icons'
+import { Rail } from './Rail'
+import { ambientVars, backdropGradient, posterGradient } from './palette'
 
 interface Props {
   onPlay: (media: MediaItem, episode: Episode, startPosition: number, playlist?: Episode[]) => void
@@ -28,7 +30,6 @@ const KIND_TABS: ReadonlyArray<{ key: MediaKind | null; label: string }> = [
   { key: 'variety', label: '综艺' },
 ]
 
-/** 每个片源自己的分类页签：红果只有推荐流（短剧），看剧AI 有电影/剧集等。 */
 const PROVIDER_KINDS: Record<
   RemoteProviderId,
   ReadonlyArray<{ key: MediaKind | null; label: string }>
@@ -41,123 +42,19 @@ function messageOf(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
 }
 
-/**
- * 首页货架：横向滚动，但隐藏原生滚动条（那条灰长的横条）。
- * 用左右渐隐暗示还有内容，悬浮时给出翻页箭头；纵向滚轮也映射为横向翻动。
- */
-function RemoteRail({
-  cards,
-  renderCard,
-}: {
-  cards: RemoteCard[]
-  renderCard: (card: RemoteCard) => JSX.Element
-}): JSX.Element {
-  const scroller = useRef<HTMLDivElement>(null)
-  const [reach, setReach] = useState({ left: false, right: false })
-
-  const sync = useCallback(() => {
-    const el = scroller.current
-    if (el === null) return
-    const max = el.scrollWidth - el.clientWidth
-    if (max <= 1) {
-      setReach({ left: false, right: false })
-      return
-    }
-    setReach({ left: el.scrollLeft > 2, right: el.scrollLeft < max - 2 })
-  }, [])
-
-  useEffect(() => {
-    sync()
-    const el = scroller.current
-    if (el === null) return
-    const observer = new ResizeObserver(sync)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [sync, cards])
-
-  // 纵向滚轮映射为横向翻动；到达两端后交还给页面纵向滚动
-  useEffect(() => {
-    const el = scroller.current
-    if (el === null) return
-    const onWheel = (event: WheelEvent): void => {
-      const max = el.scrollWidth - el.clientWidth
-      if (max <= 1 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return
-      const goingRight = event.deltaY > 0
-      if ((goingRight && el.scrollLeft >= max - 1) || (!goingRight && el.scrollLeft <= 1)) return
-      event.preventDefault()
-      el.scrollLeft += event.deltaY
-      sync()
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [sync])
-
-  const page = useCallback((direction: 1 | -1) => {
-    const el = scroller.current
-    if (el === null) return
-    el.scrollBy({ left: direction * el.clientWidth * 0.82, behavior: 'smooth' })
-  }, [])
-
-  // 键盘：卡片获得焦点后，左右方向键翻页，Home/End 到两端（流媒体货架常见做法）
-  const handleKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      const el = scroller.current
-      if (el === null) return
-      if (event.key === 'ArrowRight') {
-        event.preventDefault()
-        page(1)
-      } else if (event.key === 'ArrowLeft') {
-        event.preventDefault()
-        page(-1)
-      } else if (event.key === 'Home') {
-        event.preventDefault()
-        el.scrollTo({ left: 0, behavior: 'smooth' })
-      } else if (event.key === 'End') {
-        event.preventDefault()
-        el.scrollTo({ left: el.scrollWidth, behavior: 'smooth' })
-      }
-    },
-    [page],
-  )
-
-  const fadeClass = `${reach.left ? ' fade-left' : ''}${reach.right ? ' fade-right' : ''}`
-
-  return (
-    <div className="remote-rail-wrap">
-      <div
-        className={`remote-rail${fadeClass}`}
-        ref={scroller}
-        onScroll={sync}
-        onKeyDown={handleKeyDown}
-      >
-        {cards.map(renderCard)}
-      </div>
-      {reach.left && (
-        <button
-          type="button"
-          className="rail-nav rail-nav-prev"
-          aria-label="向左浏览"
-          onClick={() => page(-1)}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M15 5l-7 7 7 7" />
-          </svg>
-        </button>
-      )}
-      {reach.right && (
-        <button
-          type="button"
-          className="rail-nav rail-nav-next"
-          aria-label="向右浏览"
-          onClick={() => page(1)}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-      )}
-    </div>
-  )
+function kindText(kind: MediaKind): string {
+  switch (kind) {
+    case 'movie':
+      return '电影'
+    case 'series':
+      return '剧集'
+    case 'anime':
+      return '动漫'
+    case 'variety':
+      return '综艺'
+    default:
+      return '影片'
+  }
 }
 
 export function OnlineLibrary({ onPlay }: Props): JSX.Element {
@@ -172,6 +69,9 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
   const [keyword, setKeyword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // 首页 Hero 轮播：在首屏推荐位之间自动切换（P2）
+  const [heroIndex, setHeroIndex] = useState(0)
 
   const [active, setActive] = useState<RemoteCard | null>(null)
   const [detail, setDetail] = useState<RemoteDetail | null>(null)
@@ -261,7 +161,6 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
     setKeyword('')
     setResults([])
     setError(null)
-    // provider 变化会触发上方 useEffect 重新加载该片源首页
   }, [])
 
   const openCard = useCallback(
@@ -324,12 +223,32 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
     [active, detail, episodes, onPlay, provider],
   )
 
+  const homeSections = home?.sections ?? []
+  const featuredCards = homeSections[0]?.cards ?? []
+  const safeHeroIndex = featuredCards.length === 0 ? 0 : heroIndex % featuredCards.length
+  const heroCard = featuredCards[safeHeroIndex]
+
+  // 首页数据换掉时回到第一条
+  useEffect(() => {
+    setHeroIndex(0)
+  }, [home])
+
+  // 自动轮播：只在首页、且有多条推荐时运行
+  useEffect(() => {
+    if (mode !== 'home' || featuredCards.length <= 1) return
+    const timer = setInterval(() => {
+      setHeroIndex((current) => (current + 1) % featuredCards.length)
+    }, 6500)
+    return () => clearInterval(timer)
+  }, [mode, featuredCards.length, home])
+
   const renderCard = (card: RemoteCard): JSX.Element => (
-    <button key={card.id} className="remote-card" onClick={() => void openCard(card)}>
-      <div className="remote-poster">
-        <span className="remote-poster-fallback">{card.title.slice(0, 1)}</span>
+    <button key={card.id} className="media-card" onClick={() => void openCard(card)}>
+      <span className="poster" style={posterGradient(card.title)}>
+        <span className="poster-art">{card.title.slice(0, 1)}</span>
         {card.posterUrl !== '' && (
           <img
+            className="poster-img"
             src={card.posterUrl}
             alt={card.title}
             loading="lazy"
@@ -338,110 +257,212 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
             }}
           />
         )}
-        <span className="remote-poster-scrim" aria-hidden="true" />
-        <span className="remote-poster-play" aria-hidden="true">
-          ▶
+        <span className="poster-scrim" aria-hidden="true" />
+        <span className="poster-play" aria-hidden="true">
+          <Icon name="play" size={16} />
         </span>
-        {card.remarks !== '' && <span className="remote-badge">{card.remarks}</span>}
-      </div>
-      <div className="remote-card-title">{card.title}</div>
-      <div className="remote-card-meta">
-        {card.year > 0 ? card.year : ''}
-        {card.area !== '' ? ` · ${card.area}` : ''}
-      </div>
+        {card.remarks !== '' && <span className="poster-badge">{card.remarks}</span>}
+      </span>
+      <span className="media-title">{card.title}</span>
+      <span className="media-sub">
+        {[card.year > 0 ? String(card.year) : '', card.area, kindText(card.kind)]
+          .filter((part) => part !== '')
+          .join(' · ')}
+      </span>
     </button>
   )
 
   const firstEpisode = episodes[0]
 
   return (
-    <div className="online-library">
-      <div className="online-providers" role="tablist" aria-label="在线片源">
-        {REMOTE_PROVIDERS.map((item) => (
-          <button
-            key={item.id}
-            role="tab"
-            aria-selected={provider === item.id}
-            className={provider === item.id ? 'online-provider active' : 'online-provider'}
-            title={item.description}
-            onClick={() => switchProvider(item.id)}
-          >
-            {item.name}
-          </button>
-        ))}
-      </div>
-
+    <div className="online">
+      {/* P1 工具栏合并：片源 / 搜索 / 分类压成一行，窄屏自动换行 */}
       <div className="online-toolbar">
-        <div className="online-kinds" role="tablist" aria-label="分类">
+        <div className="seg" role="tablist" aria-label="在线片源">
+          {REMOTE_PROVIDERS.map((item) => (
+            <button
+              key={item.id}
+              role="tab"
+              aria-selected={provider === item.id}
+              className={provider === item.id ? 'seg-item active' : 'seg-item'}
+              title={item.description}
+              onClick={() => switchProvider(item.id)}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
+
+        <form
+          className="search-bar"
+          onSubmit={(event) => {
+            event.preventDefault()
+            submitSearch()
+          }}
+        >
+          <Icon name="search" size={17} />
+          <input
+            className="search-input"
+            value={keyword}
+            placeholder={provider === 'hongguo' ? '搜索短剧 / 漫剧' : '搜索电影 / 电视剧 / 动漫 / 综艺'}
+            onChange={(event) => setKeyword(event.target.value)}
+          />
+          <button type="submit" className="search-submit" disabled={loading}>
+            搜索
+          </button>
+          <button
+            type="button"
+            className="search-refresh"
+            aria-label="刷新首页"
+            disabled={loading}
+            onClick={() => void loadHome(provider)}
+          >
+            <Icon name="refresh" size={16} />
+          </button>
+        </form>
+
+        <div className="seg seg-kinds" role="tablist" aria-label="分类">
           {PROVIDER_KINDS[provider].map((tab) => (
             <button
               key={tab.label}
               role="tab"
               aria-selected={kind === tab.key && mode !== 'home'}
-              className={kind === tab.key && mode !== 'home' ? 'online-kind active' : 'online-kind'}
+              className={kind === tab.key && mode !== 'home' ? 'seg-item active' : 'seg-item'}
               onClick={() => chooseKind(tab.key)}
             >
               {tab.label}
             </button>
           ))}
         </div>
-        <form
-          className="online-search"
-          onSubmit={(event) => {
-            event.preventDefault()
-            submitSearch()
-          }}
-        >
-          <input
-            value={keyword}
-            placeholder={provider === 'hongguo' ? '搜索短剧 / 漫剧' : '搜索电影 / 电视剧 / 动漫 / 综艺'}
-            onChange={(event) => setKeyword(event.target.value)}
-          />
-          <button type="submit" className="btn-primary" disabled={loading}>
-            搜索
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            disabled={loading}
-            onClick={() => void loadHome(provider)}
-          >
-            刷新
-          </button>
-        </form>
       </div>
 
       {error !== null && <div className="library-error">{error}</div>}
       {loading && <div className="online-loading">加载中…</div>}
 
-      {mode === 'home' && home !== null && (
-        <div className="online-home">
-          {home.sections.map((section) => (
-            <section key={section.id} className="remote-section">
-              <div className="remote-section-head">
-                <h2>{section.title}</h2>
-                {section.subtitle !== '' && <span>{section.subtitle}</span>}
+      {mode === 'home' && heroCard !== undefined && (
+        <section className="hero" aria-label="主推内容" style={ambientVars(heroCard.title)}>
+          <div className="hero-inner" key={heroCard.id}>
+            <button
+              className="hero-poster"
+              style={posterGradient(heroCard.title)}
+              onClick={() => void openCard(heroCard)}
+              aria-label={`查看 ${heroCard.title} 详情`}
+            >
+              <div className="hero-poster-art">
+                {heroCard.title.slice(0, 1)}
+                {heroCard.posterUrl !== '' && (
+                  <img
+                    src={heroCard.posterUrl}
+                    alt={heroCard.title}
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none'
+                    }}
+                  />
+                )}
+                <span className="hero-poster-num">{kindText(heroCard.kind)}</span>
               </div>
-              <RemoteRail cards={section.cards} renderCard={renderCard} />
+            </button>
+
+            <div className="hero-info">
+              <div className="hero-eyebrow">
+                <span className="chip solid">{kindText(heroCard.kind)}</span>
+                {heroCard.year > 0 && <span className="chip">{heroCard.year}</span>}
+                {heroCard.area !== '' && <span className="chip">{heroCard.area}</span>}
+                {heroCard.remarks !== '' && <span className="chip">{heroCard.remarks}</span>}
+              </div>
+
+              <h1 className="hero-title">{heroCard.title}</h1>
+
+              <p className="hero-summary">
+                {heroCard.genres.length > 0
+                  ? `${heroCard.area !== '' ? heroCard.area + ' · ' : ''}${heroCard.genres.join(' / ')}。点击查看完整详情与选集。`
+                  : '点击查看完整详情与选集。'}
+              </p>
+
+              <div className="hero-actions">
+                <button className="btn-primary" onClick={() => void openCard(heroCard)}>
+                  <Icon name="play" size={16} />
+                  立即观看
+                </button>
+                <button className="btn-glass" onClick={() => void openCard(heroCard)}>
+                  <Icon name="info" size={16} />
+                  查看详情
+                </button>
+              </div>
+
+              {featuredCards.length > 1 && (
+                <div className="quick-strip" aria-label="快速浏览">
+                  {featuredCards.slice(0, 8).map((card, index) => (
+                    <button
+                      key={card.id}
+                      className={index === safeHeroIndex ? 'quick-tile active' : 'quick-tile'}
+                      style={posterGradient(card.title)}
+                      title={card.title}
+                      onClick={() => setHeroIndex(index)}
+                    >
+                      {card.posterUrl !== '' && (
+                        <img
+                          src={card.posterUrl}
+                          alt={card.title}
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            zIndex: 1,
+                          }}
+                          onError={(event) => {
+                            event.currentTarget.style.display = 'none'
+                          }}
+                        />
+                      )}
+                      <span style={{ position: 'relative', zIndex: 0 }}>{card.title.slice(0, 1)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {mode === 'home' && home !== null && (
+        <div>
+          {home.sections.map((section) => (
+            <section key={section.id} className="section remote-section">
+              <div className="section-head">
+                <h2 className="section-title">{section.title}</h2>
+                {section.subtitle !== '' && <span className="section-en">{section.subtitle}</span>}
+              </div>
+              <Rail>{section.cards.map(renderCard)}</Rail>
             </section>
           ))}
         </div>
       )}
 
       {mode === 'results' && (
-        <section className="remote-section">
-          <div className="remote-section-head">
-            <h2>{heading}</h2>
-            <span>{results.length} 部</span>
+        <section className="section">
+          <div className="section-head results-head">
+            <h2 className="section-title">{heading}</h2>
+            <span className="section-en">Results</span>
+            <span className="section-sub">{results.length} 部</span>
           </div>
           {results.length === 0 && !loading ? (
-            <p className="library-empty">没有找到相关内容。</p>
+            <div className="empty-state">
+              <span className="empty-icon">
+                <Icon name="search" size={28} />
+              </span>
+              <h3>没有找到相关内容</h3>
+              <p>换个关键词或切换片源再试试。</p>
+            </div>
           ) : (
-            <div className="remote-grid">{results.map(renderCard)}</div>
+            <div className="media-grid">{results.map(renderCard)}</div>
           )}
           {hasMore && (
-            <div className="online-more">
-              <button disabled={loading} onClick={loadMore}>
+            <div className="online-loading" style={{ textAlign: 'center', marginTop: 22 }}>
+              <button className="btn-glass" disabled={loading} onClick={loadMore}>
+                <Icon name="refresh" size={15} />
                 加载更多
               </button>
             </div>
@@ -450,79 +471,110 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
       )}
 
       {active !== null && (
-        <div className="remote-modal-mask" onClick={() => setActive(null)}>
+        <div className="modal-mask" onClick={() => setActive(null)}>
           <div
-            className="remote-modal"
+            className="detail-modal"
             role="dialog"
             aria-modal="true"
+            style={backdropGradient(detail?.title ?? active.title) as CSSProperties}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="remote-modal-head">
-              <span className="remote-modal-title">{detail?.title ?? active.title}</span>
-              <button className="remote-modal-close" aria-label="关闭" onClick={() => setActive(null)}>
-                ×
-              </button>
-            </div>
+            <button className="detail-close" aria-label="关闭" onClick={() => setActive(null)}>
+              <Icon name="close" size={18} />
+            </button>
 
-            <div className="remote-modal-body">
-              <div className="remote-modal-poster">
-                <span className="remote-poster-fallback">{active.title.slice(0, 1)}</span>
-                {(detail?.posterUrl ?? active.posterUrl) !== '' && (
-                  <img
-                    src={detail?.posterUrl ?? active.posterUrl}
-                    alt={active.title}
-                    onError={(event) => {
-                      event.currentTarget.style.display = 'none'
-                    }}
-                  />
-                )}
+            <div className="detail-hero">
+              <div className="detail-poster" style={posterGradient(detail?.title ?? active.title)}>
+                <div className="detail-poster-art">
+                  {active.title.slice(0, 1)}
+                  {(detail?.posterUrl ?? active.posterUrl) !== '' && (
+                    <img
+                      src={detail?.posterUrl ?? active.posterUrl}
+                      alt={active.title}
+                      onError={(event) => {
+                        event.currentTarget.style.display = 'none'
+                      }}
+                    />
+                  )}
+                </div>
               </div>
-              <div className="remote-modal-info">
-                <div className="remote-modal-meta">
-                  {[
-                    (detail?.kind ?? active.kind) === 'movie' ? '电影' : '剧集',
-                    (detail?.year ?? active.year) > 0 ? String(detail?.year ?? active.year) : '',
-                    detail?.area ?? active.area,
-                    detail?.remarks ?? active.remarks,
-                  ]
-                    .filter((part) => part !== '')
-                    .join(' · ')}
+
+              <div className="detail-info">
+                <div className="detail-facts">
+                  <span className="chip solid">{kindText(detail?.kind ?? active.kind)}</span>
+                  {(detail?.year ?? active.year) > 0 && (
+                    <span className="chip">{detail?.year ?? active.year}</span>
+                  )}
+                  {(detail?.area ?? active.area) !== '' && (
+                    <span className="chip">{detail?.area ?? active.area}</span>
+                  )}
+                  {(detail?.remarks ?? active.remarks) !== '' && (
+                    <span className="chip">{detail?.remarks ?? active.remarks}</span>
+                  )}
+                  {episodes.length > 0 && <span className="chip">共 {episodes.length} 集</span>}
                 </div>
-                <div className="remote-modal-genres">
-                  {(detail?.genres ?? active.genres).slice(0, 6).map((genre) => (
-                    <span key={genre} className="remote-genre">
-                      {genre}
-                    </span>
-                  ))}
-                </div>
-                <p className="remote-modal-overview">
+
+                <h2 className="detail-title">{detail?.title ?? active.title}</h2>
+
+                {(detail?.genres ?? active.genres).length > 0 && (
+                  <div className="detail-facts">
+                    {(detail?.genres ?? active.genres).slice(0, 8).map((genre) => (
+                      <span key={genre} className="chip">
+                        {genre}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <p className="detail-summary">
                   {detail?.overview !== undefined && detail.overview !== ''
                     ? detail.overview
                     : '暂无简介'}
                 </p>
+
                 {detail !== null && detail.actors.length > 0 && (
-                  <p className="remote-modal-cast">演员：{detail.actors.slice(0, 8).join(' / ')}</p>
+                  <p className="detail-summary" style={{ WebkitLineClamp: 2 }}>
+                    演员：{detail.actors.slice(0, 8).join(' / ')}
+                  </p>
                 )}
-                {firstEpisode !== undefined && (
-                  <button
-                    className="btn-primary remote-modal-play"
-                    onClick={() => playEpisode(firstEpisode)}
-                  >
-                    ▶ 播放第 1 集
+
+                <div className="detail-actions">
+                  {firstEpisode !== undefined ? (
+                    <button className="btn-primary" onClick={() => playEpisode(firstEpisode)}>
+                      <Icon name="play" size={15} />
+                      播放第 1 集
+                    </button>
+                  ) : (
+                    <button className="btn-primary" disabled>
+                      <Icon name="play" size={15} />
+                      播放
+                    </button>
+                  )}
+                  <button className="btn-glass" onClick={() => setActive(null)}>
+                    关闭
                   </button>
-                )}
+                </div>
               </div>
             </div>
 
-            {detailError !== null && <div className="library-error">{detailError}</div>}
-            {detailLoading && <div className="online-loading">选集加载中…</div>}
+            {detailError !== null && (
+              <div className="detail-body">
+                <div className="library-error">{detailError}</div>
+              </div>
+            )}
+            {detailLoading && (
+              <div className="detail-body">
+                <div className="online-loading">选集加载中…</div>
+              </div>
+            )}
 
             {episodes.length > 0 && (
-              <>
-                <div className="remote-episodes-head">
-                  选集 <span>共 {episodes.length} 集</span>
+              <div className="detail-body">
+                <div className="detail-section-head">
+                  <h3>选集</h3>
+                  <span>共 {episodes.length} 集</span>
                 </div>
-                <div className="remote-episodes">
+                <div className="episode-grid">
                   {episodes.map((episode) => (
                     <button
                       key={episode.id}
@@ -533,7 +585,7 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
                     </button>
                   ))}
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>

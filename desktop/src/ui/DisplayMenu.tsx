@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react'
 import type { DisplayBrightness } from '@private-cinema/core/shared'
 import { applyTheme, getThemePref, saveTheme, type ThemePref } from '../theme'
+import { Icon } from './icons'
 
 const THEME_OPTIONS: ReadonlyArray<{ key: ThemePref; label: string }> = [
   { key: 'system', label: '跟随系统' },
@@ -121,12 +122,14 @@ export function DisplayMenu(): JSX.Element {
     <div className="display-menu" ref={rootRef}>
       <button
         type="button"
-        className={open ? 'btn-ghost active' : 'btn-ghost'}
+        className={open ? 'icon-btn active' : 'icon-btn'}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={toggle}
+        title="外观与屏幕亮度"
       >
-        <span aria-hidden="true">◐</span> 显示
+        <Icon name="monitor" size={16} />
+        <span>显示</span>
       </button>
 
       {open && (
