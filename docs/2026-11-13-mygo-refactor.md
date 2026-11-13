@@ -313,7 +313,7 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 
 **验证**：`hero_img_loaded=true`，网格封面 `20/20` 成功加载（此前 `0/19`）；首页 Hero 与详情封面均显示真实海报。单测新增 `TestPosterRejectsUnlistedHost` / `TestPosterServesCachedJPEG` / `TestAllowedPosterHost`，`go test ./...` 通过；`mygo-smoke` 与 `local-e2e` 均 `[PASS]`。
 
-**已知遗留**：**搜索结果列表**的卡片封面仍为占位——上游 SDK 的搜索解析器（`ParseSearchTab` 的 `video_detail` 主分支）没有把 `cover` 拷进 `SeriesSummary`（`video_detail` 的 `cards` 分支才有）。首页/详情不受影响。可选后续：给 `openhongguo` 提 PR 补该字段，或前端按需用详情补图（会额外耗额度，暂不做）。
+**已知遗留**：**搜索结果列表**的卡片封面仍为占位——上游 SDK 的搜索解析器（`ParseSearchTab` 的 `video_detail` 主分支）没有把 `cover` 拷进 `SeriesSummary`（`video_detail` 的 `cards` 分支才有）。首页/详情不受影响。→ 已在 12.6 通过本地 fork 修复。
 
 ### 12.3 详情弹层浅色主题对比度修复（2026-11-13）
 
@@ -366,6 +366,22 @@ git tag v0.1.3 && git push origin v0.1.3
 ```
 
 **安全注记**：本次用过的浏览器 token（PrivateCinema-auto-update，30 天）曾在会话截图中露出，已建议账号所有者到 GitHub Settings → Tokens 删除；仓库 Secret 为加密存储，不经对话。
+
+### 12.6 搜索结果封面：本地 fork openhongguo 补 cover 字段（2026-11-13）
+
+**现象**：在线片库搜索结果网格全是首字占位，点开详情弹层却有真封面。实测 `hongguoSearch("丧尸")` 返回的 6 条 `posterUrl` 全为空串。
+
+**根因**：上游搜索响应里其实带 `video_detail.series_cover`，但 SDK 的 `ParseSearchTab`（`internal/protocol/parse.go`）构造 `SeriesSummary` 时漏拷了 `CoverURL`（`video_detail_list` cards 分支有拷，`video_detail` 主分支漏了）；而详情接口 `Series.CoverURL` 正常 → 弹层有图、网格没图。上游最新 tag `v0.2.0` 比在用的 master 快照还旧，无现成修复。
+
+**处理**：把在用的模块快照（`v0.2.1-0.20261112155120-1d3354a932bc`）复制到 [third_party/openhongguo/](../third_party/openhongguo/)，一行补 `CoverURL: v.VideoDetail.Cover`，`desktop/go.mod` 加：
+
+```
+replace github.com/beilunyang/openhongguo => ../third_party/openhongguo
+```
+
+**验证**：探针实测搜索「丧尸」6 条中 5 条带出真实 `.heic` 封面（经 12.2 的海报代理转 JPEG 后可显示；`宿舍求生，丧尸围城` 是上游本身没回封面数据，继续走首字兜底）。`go test ./...` 通过；`mygo-smoke` `[PASS]`。
+
+**维护注意**：以后升级 openhongguo 版本时需重新同步 `third_party/openhongguo` 并重打这行补丁（或等上游合并修复后去掉 replace）。
 
 ## 13. 自动构建与发布（GitHub Actions）
 
