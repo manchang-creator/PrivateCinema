@@ -125,9 +125,10 @@ export function LibraryScreen({ items, episodes, onScan, onPlay }: Props): JSX.E
     setHeroIndex(0)
   }, [items.length])
 
-  // 自动轮播：多部作品时每 7s 换一条主推
+  // 自动轮播：多部作品时每 7s 换一条主推（尊重减少动效偏好）
   useEffect(() => {
     if (items.length <= 1) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const timer = setInterval(() => {
       setHeroIndex((current) => (current + 1) % items.length)
     }, 7000)

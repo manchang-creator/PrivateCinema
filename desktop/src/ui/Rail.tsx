@@ -44,6 +44,7 @@ export function Rail({ children, className, alwaysNav, autoPlayMs }: Props): JSX
   // 自动轮播：按屏宽 0.9 翻页，到末尾回环；悬浮 / 聚焦时暂停，不抢用户操作
   useEffect(() => {
     if (autoPlayMs === undefined || autoPlayMs <= 0) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const el = scroller.current
     if (el === null) return
     const timer = setInterval(() => {

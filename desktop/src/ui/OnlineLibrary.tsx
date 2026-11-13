@@ -233,9 +233,10 @@ export function OnlineLibrary({ onPlay }: Props): JSX.Element {
     setHeroIndex(0)
   }, [home])
 
-  // 自动轮播：只在首页、且有多条推荐时运行
+  // 自动轮播：只在首页、且有多条推荐时运行（尊重减少动效偏好）
   useEffect(() => {
     if (mode !== 'home' || featuredCards.length <= 1) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const timer = setInterval(() => {
       setHeroIndex((current) => (current + 1) % featuredCards.length)
     }, 6500)
