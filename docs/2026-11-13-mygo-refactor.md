@@ -345,6 +345,28 @@ GTK 对话框也不在 mygo 的窗口树里）。为此加了一条**仅 e2e 构
 
 **验证**：`mygo-smoke` `[PASS]`；窗口 `WM_HINTS` 已带 icon pixmap；浅/深主题与详情截图见 [docs/fix-2026-11-13/ui-*.png](fix-2026-11-13/)。
 
+### 12.5 打通在线自动更新 v0.1.2（2026-11-13）
+
+**结论**：Linux/Windows 双平台签名更新清单已挂上 Release `v0.1.2`，已安装的应用「检查更新 → 立即更新」全链路可用（下载 → 验签 → 安装 → 自动重启，本机 0.1.0 → 0.1.2 实测通过）。
+
+**过程与坑**：
+1. CI 发版没有签名密钥 → Release 缺 `update-*.json`，检查更新 404。
+2. 修复分两层：
+   - **当次发布**：用本机 `~/.config/mygo/update-keys/mygo-update.key` 签名构建，把归档 + manifest 传到 `v0.1.2`；
+   - **以后发版**：把私钥配进仓库 Secret `MYGO_UPDATER_PRIVATE_KEY`（API sealed-box 加密写入），CI 出包自动带签名清单。
+3. **坑 A：签名与字节不一致**。本地签名的归档与 CI 构建的归档差 1 字节（gzip 时间戳非确定性），应用报 `downloaded 5774308 bytes, want 5774307`。**签名包与 manifest 必须来自同一次构建**——把本地签名的归档替换掉 CI 的同名资产后解决。
+4. **坑 B：Release 资产 CDN 缓存**。替换资产后 GitHub CDN 仍返回旧字节（新资产 id 的新 URL 不受影响）。manifest 的 `url` 改成带 `?v=0.1.2-r2` 的地址绕过（manifest 本身不签名，TLS 保证完整性；签名只针对归档字节）。
+5. Windows 端同样补了 `update-windows-amd64.json` + 归档（本地交叉构建签名；CI 出 setup.exe/portable 的同时也会带清单）。
+
+**以后发版流程**（secret 已配好）：
+```bash
+# desktop/mygo.config.ts 改 version → commit → tag → push
+git tag v0.1.3 && git push origin v0.1.3
+# CI 自动出包 + 签名 + 发布；已安装的应用自动检查并更新
+```
+
+**安全注记**：本次用过的浏览器 token（PrivateCinema-auto-update，30 天）曾在会话截图中露出，已建议账号所有者到 GitHub Settings → Tokens 删除；仓库 Secret 为加密存储，不经对话。
+
 ## 13. 自动构建与发布（GitHub Actions）
 
 新增 `.github/workflows/release-desktop.yml`：**打 `v*` tag（或 Actions 手动触发）即自动出包并发 Release**。
