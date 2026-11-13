@@ -93,8 +93,10 @@ desktop/
    自解码或外部播放器，独立议题。
 5. **打包与签名**：`mygo build` 可产出 deb/rpm/tar.gz，但正式分发还需签名/公证；旧 Electron 的
    `scripts/linux-smoke.sh`、udev 规则（背光权限）需迁移到 mygo 的 resources/安装脚本。
-6. **旧目录清理**：`linux/`、`windows/`（Electron）与本目录并存，供对照；验收通过后可删除，
-   并移除根 `package.json` 里的 Electron 相关项、`.github` 的 electron 构建流水线。
+6. **旧目录清理 ✅（已完成）**：`linux/`、`windows/`（Electron 壳）及仅被其 `postinstall` 使用的
+   `scripts/patch-openhongguo.mjs`、`vendor/openhongguo/` 已删除；`.github/workflows/{linux,windows}-build.yml`
+   （Electron CI）已移除，仅保留 `ios-build.yml`。README 桌面章节已改为 mygo。iOS（`apps/`、`Modules/`、
+   `Tests/`、`Project.swift`、`Tuist.swift`）与 `packages/core`、`desktop/` 保留。
 
 ## 5. 如何运行
 

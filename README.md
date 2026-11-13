@@ -5,37 +5,31 @@ Apple TV + Infuse 风格的极简私人影视中心（iOS / Windows / Linux）�
 仅供个人使用：无广告、无 VIP、无运营位。所有内容通过统一 `MediaProvider` 协议接入，
 内置演示媒体库（公开测试视频流 + 占位海报）保证开箱即可运行，不包含任何抓取或解析逻辑。
 
-## 桌面客户端（Windows / Linux）
+## 桌面客户端（Windows / Linux，mygo）
 
-iOS 客户端已暂停验收，当前迭代重心在桌面端。两者共用跨平台内核
-`packages/core`（`@private-cinema/core`：领域模型、IPC 契约、弹幕引擎、字幕解析），
-各自的壳分别位于 `windows/`、`linux/` 目录。
+桌面端已用 [mygo](https://github.com/egoist/mygo)（Go 后端 + 复用现有 React 前端，产物为单个纯 Go 二进制）
+重写，工程在 `desktop/`；旧的 Electron `windows/`、`linux/` 壳已删除。设计、阶段进展与真机验收记录见
+[`docs/2026-11-13-mygo-refactor.md`](docs/2026-11-13-mygo-refactor.md)，协作者须知见 [`AGENTS.md`](AGENTS.md)。
 
-> **重构进行中（mygo）**：桌面端正在从 Electron 迁移到 [mygo](https://github.com/egoist/mygo)
-> （Go 后端 + 复用现有 React 前端，产物为单个纯 Go 二进制）。新工程在 `desktop/`，说明见
-> [`docs/2026-11-13-mygo-refactor.md`](docs/2026-11-13-mygo-refactor.md)。迁移验收前
-> `windows/`、`linux/`（Electron）保留作对照。
+前端仍复用跨平台内核 `packages/core`（`@private-cinema/core`：领域模型、IPC 契约、弹幕引擎、字幕解析）。
 
-| 端 | 目录 | 系统专属能力 |
-|---|---|---|
-| Windows | `windows/` | Windows 系统亮度（WMI / DDC） |
-| Linux | `linux/` | sysfs 背光 + ddcutil（DDC/CI）外接屏亮度，AppImage / deb 打包 |
-
-Linux 端常用命令（在 `linux/` 下）：
+桌面端常用命令（在 `desktop/` 下）：
 
 ```bash
-npm install            # 依赖（packages/core 以 file: 本地包引入）
-npm run dev            # 开发热更新
-npm run typecheck      # tsc 全量检查
-npm test               # vitest 纯逻辑单测
-npm run build          # 产物在 out/
-npm run dist:dir       # 解包打包，产物 release/linux-unpacked/
-bash scripts/linux-smoke.sh   # 真机自检：背光 / ddcutil / 产物 / 启动 / --self-check
+bun install            # 前端依赖
+bun run dev            # 开发：起窗口（需图形会话）
+bun run typecheck      # tsc 全量检查
+bun run build:web      # 前端生产构建 → dist/
+bun run build          # mygo build：产出 build/linux-amd64/ 单二进制 + deb/rpm/tar.gz
+go test ./...          # Go 后端单测
 ```
 
-> 亮度需要用户侧授权：内置屏装 `linux/build/udev/90-private-cinema-backlight.rules`（背光节点归 `video` 组），
-> 外接屏装 `ddcutil` 并把用户加入 `i2c` 组。应用本身不提权，检测不到权限会返回带原因的提示。
-> 若硬件背光不可写且运行在 X11，会自动回退到 `xrandr` 软件调光（缩放 gamma，无需 root），保证亮度仍可调。
+完成门禁（改动 `desktop/` 后必跑，须输出 `[PASS]`）：`bash desktop/scripts/mygo-smoke.sh`；
+本地文件端到端（选片→播放→字幕/弹幕→续播）：`bash desktop/scripts/local-e2e.sh`。
+构建环境坑（`GOTOOLCHAIN=auto`、`-buildvcs=false`、webkit2gtk/GTK3/ffmpeg 依赖）见 `AGENTS.md`。
+
+> 系统专属能力：Windows 走 DXVA2（纯 Go `syscall`）调亮度；Linux 走 sysfs 背光 + `ddcutil`（DDC/CI）外接屏亮度，
+> 硬件背光不可写且运行在 X11 时回退 `xrandr` 软件调光。应用本身不提权，检测不到权限会返回带原因的提示。
 
 ## 环境要求
 
