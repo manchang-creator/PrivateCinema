@@ -5,3 +5,5 @@ build/
 mygo_windows_*.syso
 /desktop
 /desktop.exe
+.agents/
+.claude/

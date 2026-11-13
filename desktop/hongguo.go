@@ -95,8 +95,8 @@ func getClient() (*sdk.Client, error) {
 	hgClientOnce.Do(func() {
 		cfg := currentHongguoConfig()
 		opts := sdk.Options{
-			RetryAttempts: 2,          // 对应 TS retryAttempts=2
-			DeviceResets:  sdk.Int(3), // 对应 TS deviceResets=3
+			RetryAttempts: envInt("HONGGUO_RETRY_ATTEMPTS", 2),
+			DeviceResets:  sdk.Int(envInt("HONGGUO_DEVICE_RESETS", 3)),
 		}
 		if os.Getenv("HONGUO_DEBUG") == "1" {
 			opts.Logger = log.New(os.Stdout, "[hongguo] ", 0)
@@ -605,6 +605,20 @@ func friendlyResolveError(err error) string {
 	}
 }
 
+// friendlyError 保留可读中文消息，同时用 Unwrap 保留原始错误链，
+// 好让外层 withQuotaRetry 能用 errors.Is 识别匿名额度类错误并换设备重试。
+type friendlyError struct {
+	msg   string
+	cause error
+}
+
+func (e *friendlyError) Error() string { return e.msg }
+func (e *friendlyError) Unwrap() error { return e.cause }
+
+func wrapFriendly(err error) error {
+	return &friendlyError{msg: friendlyResolveError(err), cause: err}
+}
+
 func streamURLKind(hls bool) string {
 	if hls {
 		return "hls"
@@ -766,11 +780,11 @@ func hongguoResolve(episodeID, lineID string, serveLocal func(string) string) (R
 	if err != nil {
 		// 加密内容：SDK 照常返回播放模型，同时带回 ErrDRMProtected，交给 ContentKey 取密钥。
 		if !(errors.Is(err, sdk.ErrDRMProtected) && resolved != nil) {
-			return RemotePlayback{}, errors.New(friendlyResolveError(err))
+			return RemotePlayback{}, wrapFriendly(err)
 		}
 	}
 	if resolved == nil {
-		return RemotePlayback{}, errors.New(friendlyResolveError(err))
+		return RemotePlayback{}, wrapFriendly(err)
 	}
 
 	streams := make([]model.Stream, 0, len(resolved.Streams))
@@ -810,7 +824,7 @@ func hongguoResolve(episodeID, lineID string, serveLocal func(string) string) (R
 	// 加密：解密 + 转码成本地文件
 	contentKey, err := sdk.ContentKey(resolved)
 	if err != nil {
-		return RemotePlayback{}, errors.New(friendlyResolveError(err))
+		return RemotePlayback{}, wrapFriendly(err)
 	}
 	if contentKey.Hex == "" {
 		return RemotePlayback{}, errors.New("该集为加密内容，但未能取得解密密钥，暂时无法播放")
