@@ -188,6 +188,19 @@ hongguo 的解析受上游匿名额度限制（换真实设备/时段可解）�
 但解析仍返回「匿名额度用尽」——说明该限制是**按 IP/地区**而非仅按设备，换设备在本机无法绕过。
 结论：轮换/重试逻辑已就位并可配置，能否成功取决于上游是否按设备计数；不会造成假成功。
 
+## 8.1 额度缓解补充：只读缓存 + 请求降频（不换出口 IP）
+
+实测该额度按「IP / 地区」计，换匿名设备无效。这里**不切换出口 IP（就用本机当前 IP）**，而是从
+「少发、慢发」两条线降低触发限流、快速耗尽额度的概率：
+
+| 手段 | 文件 | 说明 |
+|---|---|---|
+| 只读 TTL 缓存 | `desktop/hongguo_cache.go` | 首页 / 详情 / 分集按 key 缓存，TTL 内复用，避免来回切页反复打上游。`HONGGUO_CACHE_TTL_MS`（默认 60000，0 关闭）。**不缓存** `ResolvePlayback`（直链短时签名，且解析本身才消耗额度）。 |
+| 请求降频 | `desktop/hongguo_throttle.go` | 进程内全局最小间隔，每次真正发上游请求前 `throttleHongguo(ctx)` 预约时间片，压住选集翻页 / 连续解析的突发。`HONGGUO_MIN_INTERVAL_MS`（默认 400，0 关闭）。 |
+
+- 与 `retry.go` 的「设备轮换 + 指数退避」互补：降频尽量不触发限流，重试管已触发的情况。
+- 单测：`TestHgCacheTTL` / `TestHgCacheZeroTTLDisabled` / `TestIntervalLimiter*`（含节奏与 ctx 取消），`go test -race` 通过。
+
 ## 9. MKV：外部播放器兜底
 
 WebView（WebKitGTK/WebView2）受容器/编码白名单限制，MKV 常 `MEDIA_ERR_SRC_NOT_SUPPORTED`。

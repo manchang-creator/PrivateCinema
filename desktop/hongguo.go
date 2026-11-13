@@ -227,8 +227,13 @@ func actorsFromRows(series model.Series) []string {
 
 // ==================== 首页 ====================
 
-// hongguoHome 首页聚合：推荐频道 + 各热搜榜（取得到的才加入）。
+// hongguoHome 首页聚合（带 TTL 缓存，降低按 IP 计的请求量）。
 func hongguoHome() (RemoteHomeData, error) {
+	return withHgCache("hongguo:home", hongguoHomeFetch)
+}
+
+// hongguoHomeFetch 首页聚合：推荐频道 + 各热搜榜（取得到的才加入）。
+func hongguoHomeFetch() (RemoteHomeData, error) {
 	client, err := getClient()
 	if err != nil {
 		return RemoteHomeData{}, err
@@ -240,6 +245,7 @@ func hongguoHome() (RemoteHomeData, error) {
 	if page, err := func() (*sdk.Page[model.SeriesSummary], error) {
 		ctx, cancel := hongguoCtx()
 		defer cancel()
+		throttleHongguo(ctx)
 		return client.Discover(ctx, sdk.DiscoverOptions{})
 	}(); err == nil {
 		cards := make([]RemoteCard, 0, len(page.Items))
@@ -255,6 +261,7 @@ func hongguoHome() (RemoteHomeData, error) {
 	if hot, err := func() (*model.HotSearch, error) {
 		ctx, cancel := hongguoCtx()
 		defer cancel()
+		throttleHongguo(ctx)
 		return client.HotSearch(ctx)
 	}(); err == nil && hot != nil {
 		for _, board := range hot.Boards {
@@ -362,6 +369,7 @@ func hongguoBrowse(kind string, page int) (RemoteBrowsePage, error) {
 	}
 
 	ctx, cancel := hongguoCtx()
+	throttleHongguo(ctx)
 	result, err := client.Discover(ctx, opts)
 	cancel()
 	if err != nil {
@@ -413,6 +421,7 @@ func hongguoSearch(keyword string, page int) (RemoteBrowsePage, error) {
 	}
 
 	ctx, cancel := hongguoCtx()
+	throttleHongguo(ctx)
 	result, err := client.Search(ctx, q, opts)
 	cancel()
 	if err != nil {
@@ -440,14 +449,22 @@ func hongguoSearch(keyword string, page int) (RemoteBrowsePage, error) {
 
 // ==================== 详情 / 分集 ====================
 
-// hongguoDetail 作品详情。
+// hongguoDetail 作品详情（带 TTL 缓存）。
 func hongguoDetail(mediaID string) (RemoteDetail, error) {
+	return withHgCache("hongguo:detail:"+mediaID, func() (RemoteDetail, error) {
+		return hongguoDetailFetch(mediaID)
+	})
+}
+
+// hongguoDetailFetch 作品详情。
+func hongguoDetailFetch(mediaID string) (RemoteDetail, error) {
 	client, err := getClient()
 	if err != nil {
 		return RemoteDetail{}, err
 	}
 
 	ctx, cancel := hongguoCtx()
+	throttleHongguo(ctx)
 	series, err := client.GetSeries(ctx, mediaID)
 	cancel()
 	if err != nil {
@@ -482,8 +499,15 @@ func hongguoDetail(mediaID string) (RemoteDetail, error) {
 	}, nil
 }
 
-// hongguoEpisodes 分集列表。红果一部剧可能有数百集，服务端通常一页返回全部，这里最多续取若干页。
+// hongguoEpisodes 分集列表（带 TTL 缓存）。
 func hongguoEpisodes(mediaID string) ([]RemoteEpisode, error) {
+	return withHgCache("hongguo:episodes:"+mediaID, func() ([]RemoteEpisode, error) {
+		return hongguoEpisodesFetch(mediaID)
+	})
+}
+
+// hongguoEpisodesFetch 分集列表。红果一部剧可能有数百集，服务端通常一页返回全部，这里最多续取若干页。
+func hongguoEpisodesFetch(mediaID string) ([]RemoteEpisode, error) {
 	client, err := getClient()
 	if err != nil {
 		return nil, err
@@ -497,6 +521,7 @@ func hongguoEpisodes(mediaID string) ([]RemoteEpisode, error) {
 			opts.Cursor = cursor
 		}
 		ctx, cancel := hongguoCtx()
+		throttleHongguo(ctx)
 		page, err := client.ListEpisodes(ctx, mediaID, opts)
 		cancel()
 		if err != nil {
@@ -775,6 +800,7 @@ func hongguoResolve(episodeID, lineID string, serveLocal func(string) string) (R
 	}
 
 	ctx, cancel := hongguoCtx()
+	throttleHongguo(ctx)
 	resolved, err := client.ResolvePlayback(ctx, episodeID, sdk.PlaybackOptions{})
 	cancel()
 	if err != nil {
