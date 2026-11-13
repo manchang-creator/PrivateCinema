@@ -68,6 +68,10 @@
         {
           "from": "build/udev/90-private-cinema-backlight.rules",
           "to": "udev/90-private-cinema-backlight.rules"
+        },
+        {
+          "from": "build/icon.png",
+          "to": "icon.png"
         }
       ],
       "category": "AudioVideo",
@@ -81,7 +85,8 @@
           "Categories": "AudioVideo;Player;",
           "StartupWMClass": "PrivateCinema"
         }
-      }
+      },
+      "maintainer": "manchang-creator <1297441823@qq.com>"
     },
     "deb": {
       "depends": [
@@ -93,11 +98,13 @@
         "xdg-utils",
         "libatspi2.0-0",
         "libuuid1",
-        "libsecret-1-0"
+        "libsecret-1-0",
+        "ffmpeg"
       ],
       "recommends": [
         "ddcutil"
       ]
     }
-  }
+  },
+  "homepage": "https://github.com/manchang-creator/PrivateCinema"
 }

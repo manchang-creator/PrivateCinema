@@ -374,8 +374,9 @@ function runFfmpeg(args: string[]): Promise<void> {
 }
 
 /** 解密 + 转码一集到本地缓存；已存在则直接复用。key 为 16 字节 AES 十六进制。 */
+const decryptInFlight = new Map<string, Promise<string>>()
+
 async function ensureDecrypted(episodeId: string, stream: OhgStream, key: string): Promise<string> {
-  await mkdir(config.cacheDir, { recursive: true })
   // 缓存键只用「分集 + 清晰度」：播放直链每次带新的签名，不能进哈希，否则永远不命中。
   const hash = createHash('sha1')
     .update(`${episodeId}|${stream.definition ?? ''}`)
@@ -385,38 +386,42 @@ async function ensureDecrypted(episodeId: string, stream: OhgStream, key: string
   const cached = await stat(output).catch(() => null)
   if (cached !== null && cached.size > 0) return output
 
-  const temp = `${output}.part.mp4`
-  await rm(temp, { force: true })
-  // 红果是 cenc-aes-ctr + bytevc1(HEVC)，用 -decryption_key 解密，再转成 Chromium 能解的 H.264/AAC。
-  await runFfmpeg([
-    '-hide_banner',
-    '-loglevel',
-    'error',
-    '-y',
-    '-decryption_key',
-    key,
-    '-i',
-    stream.url ?? '',
-    '-c:v',
-    'libx264',
-    '-preset',
-    'ultrafast',
-    '-crf',
-    '26',
-    '-maxrate',
-    '1400k',
-    '-bufsize',
-    '2800k',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '96k',
-    '-movflags',
-    '+faststart',
-    temp,
-  ])
-  await rename(temp, output)
-  return output
+  // 同一集同清晰度可能被并发请求（React StrictMode / 连点）：复用同一个解密任务，
+  // 避免两个 ffmpeg 抢写同一文件（这正是之前“Unable to re-open ... No such file”的来源）。
+  const running = decryptInFlight.get(output)
+  if (running !== undefined) return running
+
+  const task = (async (): Promise<string> => {
+    await mkdir(config.cacheDir, { recursive: true })
+    // 临时文件带 pid + 时间戳，杜绝并发写同一路径。
+    const temp = `${output}.${process.pid}.${Date.now()}.part.mp4`
+    try {
+      // 红果是 cenc-aes-ctr + bytevc1(HEVC)：-decryption_key 解密，再转成 Chromium 能解的 H.264/AAC。
+      // 不加 -movflags +faststart：本地文件走 Range 读取，moov 位置无所谓，而 faststart 需要二次
+      // 读写同一个文件，遇到并发/短时文件句柄问题就会像上面那样炸掉。
+      await runFfmpeg([
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-decryption_key', key,
+        '-i', stream.url ?? '',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26',
+        '-maxrate', '1400k', '-bufsize', '2800k',
+        '-c:a', 'aac', '-b:a', '96k',
+        temp,
+      ])
+      await rename(temp, output)
+      return output
+    } catch (error) {
+      await rm(temp, { force: true })
+      throw error
+    }
+  })()
+
+  decryptInFlight.set(output, task)
+  try {
+    return await task
+  } finally {
+    decryptInFlight.delete(output)
+  }
 }
 
 export interface HongguoResolveContext {

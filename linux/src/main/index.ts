@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   IPC,
@@ -67,6 +68,15 @@ function registerMediaProtocol(): void {
 }
 
 // ==================== 窗口 ====================
+/** 应用图标：打包后取 resources/icon.png，开发时取 build/icon.png。 */
+function appIconPath(): string | undefined {
+  const candidates = [
+    join(process.resourcesPath ?? '', 'icon.png'),
+    join(__dirname, '../../build/icon.png'),
+  ]
+  return candidates.find((candidate) => candidate !== '' && existsSync(candidate))
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -74,6 +84,7 @@ function createWindow(): void {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#0b0b0d',
+    icon: appIconPath(),
     show: false,
     // Linux 下自绘外观：不加菜单栏，标题栏走桌面环境默认
     autoHideMenuBar: true,
