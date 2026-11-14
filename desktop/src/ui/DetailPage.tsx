@@ -10,7 +10,7 @@ import { kindLabel, sortEpisodes } from '../lib/media-kit'
 import { ensureDetail, getMeta, rememberDetail } from '../lib/remote-cache'
 import type { DetailTarget } from '../lib/router'
 import { useFavorites } from '../lib/store'
-import { PosterCard } from './PosterCard'
+import { PosterCard, proxiedPoster } from './PosterCard'
 import { Rail, SectionHead } from './Rail'
 import { Icon } from './icons'
 import { accentVars, backdropGradient, posterGradient } from './palette'
@@ -193,6 +193,12 @@ export function DetailPage({
   const favorite = favorites.has(target.id)
   const coverStyle = cover === '' ? posterGradient(title) : {}
 
+  // 封面统一走 proxiedPoster：HEIC 由后端转 JPEG；同时给详情页补上「加载失败」兜底 ——
+  // 百度的图床 gimg0.baidu.com 偶发 302/限流，且 webp 直连在旧 WebKit 上会失败，
+  // 之前这里只显示一块空白底色，看起来像「没有封面」。
+  const posterSrc = proxiedPoster(cover)
+  const [posterBroken, setPosterBroken] = useState(false)
+
   // 多季作品：按 seasonIndex 分组（本地常见）
   const seasons = useMemo(() => {
     if (target.source !== 'local') return []
@@ -210,7 +216,9 @@ export function DetailPage({
   return (
     <div className="page detail-page" style={{ ...backdropGradient(title), ...accentVars(title) }}>
       <div className="detail-backdrop" aria-hidden="true">
-        {cover !== '' && <img src={cover} alt="" referrerPolicy="no-referrer" />}
+        {posterSrc !== '' && !posterBroken && (
+          <img src={posterSrc} alt="" referrerPolicy="no-referrer" />
+        )}
         <span className="detail-backdrop-veil" />
       </div>
 
@@ -222,10 +230,18 @@ export function DetailPage({
 
         <div className="detail-hero">
           <div className="detail-poster" style={coverStyle}>
-            {cover === '' ? (
-              <span className="detail-poster-letter">{title.slice(0, 1)}</span>
+            {posterSrc === '' || posterBroken ? (
+              <span className="detail-poster-fallback" aria-hidden="true">
+                <span className="detail-poster-letter">{title.slice(0, 1)}</span>
+                <span className="detail-poster-note">{posterBroken ? '封面加载失败' : '暂无海报'}</span>
+              </span>
             ) : (
-              <img src={cover} alt={title} referrerPolicy="no-referrer" />
+              <img
+                src={posterSrc}
+                alt={title}
+                referrerPolicy="no-referrer"
+                onError={() => setPosterBroken(true)}
+              />
             )}
             <span className="detail-poster-badge">{kindLabel(kind)}</span>
           </div>

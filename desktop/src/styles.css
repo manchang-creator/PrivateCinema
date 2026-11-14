@@ -2251,6 +2251,25 @@ select {
   font-weight: 800;
   color: rgba(255, 255, 255, 0.78);
 }
+/* 详情页封面兜底：让「本来没图」和「加载失败」都能被看见，而不是留一块空白 */
+.detail-poster-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.detail-poster-note {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
 .detail-poster-badge {
   position: absolute;
   top: 8px;

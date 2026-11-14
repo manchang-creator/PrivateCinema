@@ -171,8 +171,14 @@ func modTime(info os.FileInfo) time.Time { return info.ModTime() }
 // ---- 海报代理：HEIC/HEIF → JPEG ----
 
 // posterHostSuffixes 只代理这些 CDN 域名的图片，避免被渲染进程当成任意 URL 抓取器（SSRF）。
+// 每组对应一个片源的图床：
+//   - 红果：fqnovelpic.com / byteimg.com / douyinpic.com / snssdk.com / bytedance.com
+//   - 看剧AI：baidu.com（gimg0.baidu.com 中转图）、baipiaozhe.com（源站图）
+// 百度图床对浏览器直连会按 Referer/频次拒连（表现为详情页封面白块），
+// 走这里的 Go 侧代理带上固定 UA、空 Referer 拉取更稳，且能转成 JPEG。
 var posterHostSuffixes = []string{
 	"fqnovelpic.com", "byteimg.com", "douyinpic.com", "snssdk.com", "bytedance.com",
+	"baidu.com", "baipiaozhe.com",
 }
 
 func allowedPosterHost(host string) bool {

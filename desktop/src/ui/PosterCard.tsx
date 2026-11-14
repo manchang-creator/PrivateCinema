@@ -32,15 +32,31 @@ interface Props {
 }
 
 /**
- * 封面 URL 归一：红果等片源的封面是 HEIC/HEIF，WebView 解不了，走后端 loopback
- * 海报代理（Go 侧转 JPEG）；其它格式（jpg/png/webp）原样直连。
+ * 封面 URL 归一：HEIC/HEIF WebView 解不了，走后端 loopback 海报代理（Go 侧转 JPEG）；
+ * 其它格式（jpg/png/webp）原样直连。
  */
 export function proxiedPoster(raw: string): string {
   if (raw === '') return ''
   if (!/\.(heic|heif)(\?|#|$)/i.test(raw)) return raw
+  return mediaPosterURL(raw)
+}
+
+/** 强制走海报代理（不看扩展名）。用于直连失败后的二次尝试。 */
+export function forcedPoster(raw: string): string {
+  return mediaPosterURL(raw)
+}
+
+function mediaPosterURL(raw: string): string {
   const base = getMediaBase()
   if (base === '') return raw
   return `${base}poster?u=${encodeURIComponent(raw)}`
+}
+
+/** 上游占位图（看剧AI 在没海报时返回这个 svg）——等同于「没有封面」。 */
+const UPSTREAM_PLACEHOLDER = /placeholder-poster\.svg(\?|#|$)/i
+
+export function isPlaceholderCover(raw: string): boolean {
+  return raw.trim() !== '' && UPSTREAM_PLACEHOLDER.test(raw)
 }
 
 export function PosterCard({
@@ -58,8 +74,12 @@ export function PosterCard({
   className,
   style,
 }: Props): JSX.Element {
+  // 直连失败 → 用后端海报代理再试一次（百度图床 gimg0.baidu.com 会按 Referer/频次拒连，
+  // Go 侧代拉能绕开浏览器的跨域与 Referer 限制）；代理也失败才认定 broken。
+  const [retried, setRetried] = useState(false)
   const [broken, setBroken] = useState(false)
-  const src = proxiedPoster(cover)
+  const placeholderCover = isPlaceholderCover(cover)
+  const src = placeholderCover ? '' : retried ? forcedPoster(cover) : proxiedPoster(cover)
   // 三种状态要能看出区别：
   //   有图且没坏 → 正常封面；有图但加载失败 → broken，显示「封面加载失败」；
   //   上游本来就没图 → 显示完整短标题 + 类型标签，底色走 posterGradient。
@@ -97,7 +117,13 @@ export function PosterCard({
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"
-              onError={() => setBroken(true)}
+              onError={() => {
+                if (!retried && !broken) {
+                  setRetried(true)
+                  return
+                }
+                setBroken(true)
+              }}
             />
           )}
           <span className="pcard-scrim" aria-hidden="true" />

@@ -835,3 +835,57 @@ window.cinema.remoteSearch('hongguo', k, 1)
 ### 19.6 版本
 
 升到 **0.1.7** 并已重装到 `~/.local/private-cinema.app/`（md5 与构建产物一致）。
+
+## 20. 详情页封面白块：补上代理与兜底（2026-11-14）
+
+### 20.1 现象
+
+《重生囤百亿物资，突击小队通关末世第二季》卡片有封面，进详情页左侧大图却是空白块。
+
+### 20.2 排查结论（数据本身没问题）
+
+该剧 `poster_url` 是正常的：
+
+```
+https://gimg0.baidu.com/gimg/app=2001&n=0&g=0n&fmt=webp&src=img.baipiaozhe.com/assets/images/ad/<hash>.webp
+```
+
+- curl 直取：HTTP 200、`image/webp`、640×915、67KB；
+- WebView 内 `new Image()` 加载：`OK 640x915`；
+- 连续 15 次串行 + 20 次并行请求图床：全部 200，无明显限流。
+
+所以不是「没封面」，也不是图床挂了。真正的问题是**详情页渲染层**：
+
+1. `DetailPage` 用 `<img src={cover}>` **直接怼原始 URL**，没走 `proxiedPoster`（卡片和
+   hero 都走了），片源换域名/加限制时会与列表页表现不一致；
+2. 加载失败时**没有任何兜底**，只留 `posterGradient` 的纯色底 —— 视觉上就是一块白/灰，
+   用户无法区分「本来没图」和「加载失败」；
+3. 看剧AI 在缺海报时会返回 `img.baipiaozhe.com/assets/images/placeholder-poster.svg`，
+   这是个占位图，应当等同「没有封面」处理，而不是当图片去加载。
+
+### 20.3 改动
+
+- [DetailPage.tsx](desktop/src/ui/DetailPage.tsx)：封面统一 `proxiedPoster(cover)`，
+  背景图与左封面共用同一 `posterSrc`；新增 `posterBroken` 状态，失败时渲染
+  `detail-poster-fallback`（首字 + 「封面加载失败」/「暂无海报」）；
+- [PosterCard.tsx](desktop/src/ui/PosterCard.tsx)：
+  - 抽出 `forcedPoster()`（强制走代理，不看扩展名）与 `mediaPosterURL()`；
+  - `isPlaceholderCover()` 识别上游 `placeholder-poster.svg` → 当作无封面；
+  - 卡片 `onError` 改为**两级**：先把直连换成 `forcedPoster`，代理也失败才 `broken`；
+- [media_server.go](desktop/media_server.go)：`posterHostSuffixes` 增加
+  `baidu.com`（gimg0 中转）、`baipiaozhe.com`（源站），让看剧AI 的图也能走代理
+  （Go 侧固定 UA + 空 Referer 拉取，避开浏览器侧的 Referer/跨域判定）；
+  SSRF 面仍受白名单约束。
+
+### 20.4 验证
+
+- `proxiedPoster` / `forcedPoster` / `isPlaceholderCover` 类型检查通过；
+- Go 代理对百度图床实测 200 + `image/webp` 67KB；
+- 详情页兜底样式（`.detail-poster-fallback` / `.detail-poster-note`）随包发布；
+- 门禁 `bash desktop/scripts/mygo-smoke.sh` → `[PASS]`；`go vet` / `go test` 全过。
+
+### 20.5 已知限制
+
+百度图床首次冷启动偶发慢响应（>3s）。现在即使失败也会显示「封面加载失败」并图片走代理重试一次，
+不再是无解释的白块。若后续要彻底消除，可在 Go 侧对海报做本地磁盘缓存（`media_server.go`
+已有 `posterDir` 缓存目录，可直接复用）。
