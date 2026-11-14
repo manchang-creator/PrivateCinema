@@ -53,11 +53,22 @@ var (
 	}
 )
 
+// defaultFfmpegPath 只是「用户显式指定」的值；真正定位见 ffmpeg.go 的 detectFfmpeg。
 func defaultFfmpegPath() string {
-	if p := os.Getenv("FFMPEG_PATH"); p != "" {
-		return p
+	return strings.TrimSpace(os.Getenv("FFMPEG_PATH"))
+}
+
+// ffmpegExecutable 返回可用的 ffmpeg 路径：先按 ffmpeg.go 的候选顺序探测，全都不行才报错。
+func ffmpegExecutable(configured string) (string, error) {
+	path, reasons := detectFfmpeg(configured)
+	if path != "" {
+		return path, nil
 	}
-	return "ffmpeg"
+	msg := "未找到 ffmpeg，红果加密分集无法解密播放。" + ffmpegHintInstall
+	if reasons != "" {
+		msg += "（已尝试：" + reasons + "）"
+	}
+	return "", errors.New(msg)
 }
 
 // configureHongguo 由主进程启动时注入实际缓存目录 / ffmpeg 路径 / 匿名设备档案路径。
@@ -656,7 +667,13 @@ var preferredDefinitions = []string{"480p", "360p", "540p", "720p", "1080p"}
 
 var hgLineIDRe = regexp.MustCompile(`^hg-(\d+)$`)
 
+// isEncryptedStream 判断这条流是否 CENC 加密（需要解密密钥 + ffmpeg 才能播）。
+func isEncryptedStream(stream model.Stream) bool { return stream.Protected }
+
 // pickStreamIndex 选出一条流。lineId 支持 `hg-<index>` 或清晰度标签；否则按优先级挑单文件流。
+//
+// 关键取舍：**未加密的流优先**。红果并非所有分集都加密（实测同一部剧有的集是正常 HEVC 明文），
+// 明文流 WebView 直接能播，根本不需要 ffmpeg；只有整集都是加密流时才落到解密转码这条路。
 func pickStreamIndex(streams []model.Stream, lineID string) int {
 	if lineID != "" {
 		if m := hgLineIDRe.FindStringSubmatch(lineID); m != nil {
@@ -670,6 +687,19 @@ func pickStreamIndex(streams []model.Stream, lineID string) int {
 			}
 		}
 	}
+	for _, definition := range preferredDefinitions {
+		for i, stream := range streams {
+			if stream.Definition == definition && !stream.HLS && !stream.Dash && !isEncryptedStream(stream) {
+				return i
+			}
+		}
+	}
+	for i, stream := range streams {
+		if !stream.HLS && !stream.Dash && !isEncryptedStream(stream) {
+			return i
+		}
+	}
+	// 全是加密流：退回旧规则（仍然优先单文件，避免拿到 manifest）。
 	for _, definition := range preferredDefinitions {
 		for i, stream := range streams {
 			if stream.Definition == definition && !stream.HLS && !stream.Dash {
@@ -775,19 +805,13 @@ func runFfmpeg(ffmpegPath string, args []string) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, exec.ErrNotFound) {
-		return errors.New("未找到 ffmpeg：请先安装 ffmpeg 并加入 PATH")
-	}
-	var execErr *exec.Error
-	if errors.As(err, &execErr) {
-		return errors.New("未找到 ffmpeg：请先安装 ffmpeg 并加入 PATH")
-	}
-	code := -1
+	// Windows 上误放了 0 字节/被安全软件劫持的 exe，报的也是「不是有效的 Win32 程序」这类
+	// 非 exec.ErrNotFound 的错误，所以任何启动失败都按「不可用」提示，并带上原始信息。
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		code = exitErr.ExitCode()
+	if !errors.As(err, &exitErr) {
+		return fmt.Errorf("ffmpeg 无法运行（%v）：%s。（已用：%s）", err, ffmpegHintInstall, ffmpegPath)
 	}
-	return fmt.Errorf("ffmpeg 解密失败（退出码 %d）：%s", code, lastLinesTail(tail.String(), 3))
+	return fmt.Errorf("ffmpeg 解密失败（退出码 %d）：%s", exitErr.ExitCode(), lastLinesTail(tail.String(), 3))
 }
 
 // decryptInFlight 用「输出路径 → 进行中的任务」做同 key 并发去重，
@@ -851,7 +875,11 @@ func decryptOne(cfg hongguoConfig, output string, stream model.Stream, key strin
 		"-c:a", "aac", "-b:a", "96k",
 		temp,
 	}
-	if err := runFfmpeg(cfg.ffmpegPath, args); err != nil {
+	ffmpegPath, err := ffmpegExecutable(cfg.ffmpegPath)
+	if err != nil {
+		return "", err
+	}
+	if err := runFfmpeg(ffmpegPath, args); err != nil {
 		_ = os.Remove(temp)
 		return "", err
 	}
@@ -923,7 +951,8 @@ func hongguoResolve(episodeID, lineID string, serveLocal func(string) string) (R
 		}, nil
 	}
 
-	// 加密：解密 + 转码成本地文件
+	// 能直接播的流（未加密）在上面已经返回；走到这里说明整集只有加密流。
+	// 解密 + 转码成本地文件
 	contentKey, err := sdk.ContentKey(resolved)
 	if err != nil {
 		return RemotePlayback{}, wrapFriendly(err)

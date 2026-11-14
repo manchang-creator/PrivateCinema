@@ -117,6 +117,49 @@ export interface RemotePlayback {
   lines: RemoteLine[]
 }
 
+/** 一条 ffmpeg 候选探测记录。 */
+export interface FfmpegChecked {
+  path: string
+  ok: boolean
+  /** 探测失败原因（不存在 / 不是可执行文件 / 版本输出为空）。 */
+  reason?: string
+}
+
+/**
+ * 更新镜像（国内自建源）状态。
+ * 镜像只负责分发文件，签名仍由应用内置的 ed25519 公钥校验，所以镜像不可信也装不上坏包。
+ */
+export interface UpdateMirror {
+  /** 当前构建是否在用镜像（配置了地址且构建启用更新）。 */
+  enabled: boolean
+  /** 镜像根地址；未配置为空串。 */
+  base: string
+  /** 启动探测结果：清单能取到且格式正确。 */
+  reachable: boolean
+  /** 镜像上清单声明的版本。 */
+  version: string
+  /** 探测失败原因；可达时为空串。 */
+  error: string
+}
+
+/**
+ * 本机 ffmpeg 环境诊断结果。
+ * 红果加密分集必须靠 ffmpeg 解密，Windows 上「装了但应用没看到」是最常见的失败，
+ * 这里把探测过的候选与版本一次性给界面，用户照着改就能修好。
+ */
+export interface FfmpegStatus {
+  available: boolean
+  /** 最终使用的 ffmpeg 完整路径。 */
+  path: string
+  /** `ffmpeg -version` 的第一行。 */
+  version: string
+  checked: FfmpegChecked[]
+  /** 安装 / 指定路径的建议文案。 */
+  hint: string
+  /** 解密产物缓存目录。 */
+  cacheDir: string
+}
+
 /**
  * 一台显示器的亮度状态。
  * 可用与不可用互斥，用联合类型表达 —— 让「available 但没有范围」这种非法状态无法构造。
@@ -207,6 +250,12 @@ export interface CinemaApi {
     seriesId: string,
     episodeId: string,
   ): Promise<DanmakuItem[]>
+
+  // ---------- 环境诊断 ----------
+  /** 探测本机 ffmpeg（红果解密依赖），返回可用性、版本与尝试过的候选路径。 */
+  ffmpegDiagnose(): Promise<FfmpegStatus>
+  /** 更新镜像状态（未配置镜像时返回零值）。 */
+  updateMirrorStatus(): Promise<UpdateMirror>
 
   // ---------- 应用更新 ----------
   /** 应用与更新元信息（版本 / 平台 / 是否启用更新 / 自动更新开关）。 */

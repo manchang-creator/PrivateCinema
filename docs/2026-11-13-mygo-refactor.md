@@ -889,3 +889,221 @@ https://gimg0.baidu.com/gimg/app=2001&n=0&g=0n&fmt=webp&src=img.baipiaozhe.com/a
 百度图床首次冷启动偶发慢响应（>3s）。现在即使失败也会显示「封面加载失败」并图片走代理重试一次，
 不再是无解释的白块。若后续要彻底消除，可在 Go 侧对海报做本地磁盘缓存（`media_server.go`
 已有 `posterDir` 缓存目录，可直接复用）。
+
+## 21. Windows：ffmpeg 找不到导致「线路解析失败」（2026-11-14）
+
+### 21.1 现象
+
+Windows 安装包（v0.1.9）打开红果短剧任意一集，播放页直接弹：
+
+> 线路解析失败：未找到 ffmpeg：请先安装 ffmpeg 并加入 PATH
+
+Linux 本机一切正常，所以不是解析链路坏，而是**依赖探测**在 Windows 上不成立。
+
+### 21.2 排查结论
+
+1. 红果分集是 CENC 加密的 HEVC，Chromium/WebView2 不能直接解，必须 `ffmpeg -decryption_key`
+   解密 + 转码到本地缓存（`hongguo.go` 的 `decryptOne`）。安装包里**不带** ffmpeg。
+2. 旧实现只有两条线索：`FFMPEG_PATH` 环境变量，或裸名 `ffmpeg` 交给 `exec.LookPath`（即进程 PATH）。
+   实际 Windows 用户最常见的三种状态它都覆盖不到：
+   - `winget install Gyan.FFmpeg` / `choco install ffmpeg` 装完**没重开应用**——已运行的进程
+     拿的是启动时的 PATH 快照，新加的目录看不见；
+   - 便携版/手动解压的 `ffmpeg.exe` 就放在 `私人影院.exe` 同目录，没人会去改 PATH；
+   - WinGet 的 `Links\ffmpeg.exe` 存在，但 PATH 里没那一项。
+3. 报错也没有区分「没装」和「装了但应用看不到」，用户无从下手。
+
+### 21.3 改动
+
+- 新增 [ffmpeg.go](desktop/ffmpeg.go)：`ffmpegCandidates()` 按固定顺序给出候选——
+  `FFMPEG_PATH`/注入值 → 应用同目录（便携版）→ 平台常见安装位（WinGet Links、WinGet Packages
+  里的 `Gyan.FFmpeg*`、`ProgramFiles\ffmpeg\bin`、`C:\ffmpeg\bin`；macOS 的 Homebrew 两个前缀；
+  Linux 的 `/usr/bin`、`/usr/local/bin`、`/snap/bin`）→ 最后才用裸名走 PATH；
+- `probeFfmpeg()` 用 `ffmpeg -version` 确认「能跑」而不是「文件存在」（8s 超时、结果进程内缓存，
+  失败结果 30s 内复用，避免每次播放都跑一遍）；
+- `ffmpegExecutable()` 逐个探测，全失败时给出**带安装指引 + 已尝试清单**的中文错误；
+- `decryptOne` 改成先定位可执行文件再 `runFfmpeg`；`runFfmpeg` 把任何非 `ExitError` 的启动失败
+  （0 字节 exe、被安全软件拦截的「不是有效的 Win32 程序」）都翻成「ffmpeg 无法运行」并带路径；
+- [main.go](desktop/main.go)：启动时 `warmFfmpeg()` 后台预热探测；
+- 新绑定接口 `Cinema.FfmpegDiagnose()` → `FfmpegStatus`（可用性 / 版本 / 逐条候选探测结果 /
+  安装建议 / 缓存目录），`packages/core/src/shared/ipc.ts` 同步类型；
+- 前端：
+  - 播放页错误条在消息里含 ffmpeg 时给一个「修复指引」按钮，展开面板列出三步安装法
+    （winget 装完要重开应用、便携版放同目录、`FFMPEG_PATH`）+ 一键「检测本机 ffmpeg」；
+  - 设置页新增「环境诊断」卡片，随时复查 ffmpeg 与解密缓存路径；
+  - 解析错误统一走 `withResolvePrefix()`，后端已自带前缀时不重复叠加。
+
+### 21.4 验证
+
+- `go test ./...` 全过（新增 `ffmpeg_test.go`：候选顺序 / 应用同目录 / 探测缓存 / 缺 ffmpeg 时的指引文案）；
+- `go vet ./...` 干净；`bun run build:web`（tsc + vite）通过；
+- 门禁 `bash desktop/scripts/mygo-smoke.sh` → `[PASS]`；
+- `bash desktop/scripts/local-e2e.sh` → `[PASS]`（顺带修了它的一处用例污染：
+  弹幕开关持久化在 localStorage，上一次用例把「关」留下来会让下次初始态断言失败，现在先归一化成「开」）；
+- Windows 交叉编译 `GOOS=windows go build -ldflags "-H windowsgui"` 产物正常（PE32+ GUI）。
+
+### 21.5 已知限制
+
+安装包仍**不自带** ffmpeg（体积与 GPL/LGPL 授权都麻烦）。Windows 首次播放红果分集前需要
+`winget install Gyan.FFmpeg` 或把 `ffmpeg.exe` 放到应用同目录；找不到时现在会明确告诉用户该怎么做，
+并能在设置页确认应用到底探测了哪些路径。
+
+## 22. 对照 hongguo-drama：它凭什么「装了就能播」（2026-11-14）
+
+参考实现：[jackotom/hongguo-drama](https://github.com/jackotom/hongguo-drama)（Electron，v7.2）。读了它的
+`package.json` / `main.js` / `src/native/bytevc2.js` / `src/native/hls-media.js` / `server/media.cjs` /
+`docs/bytevc2-playback.md`，差别不在「能不能解密」，而在**依赖从哪来**和**什么时候才需要它**。
+
+| 维度 | 它 | 我们（修复前） | 我们（现在） |
+|---|---|---|---|
+| ffmpeg 来源 | **随包内置**：`electron-builder` 的 `extraResources` 把 `build/ffmpeg` → `resources/bin/ffmpeg.exe`、`ffprobe.exe`、`librempeg.exe`。打包前 `scripts/setup-ffmpeg.js` 从 GyanD/codexffmpeg 下载 essentials 包并校验 SHA-256 | 依赖系统 PATH / `FFMPEG_PATH` | 应用同目录 + 平台常见安装位 + PATH 全查一遍，并给出安装指引（§21） |
+| 查找顺序 | 正式包**只用随包二进制**；`app.isPackaged !== true` 时才扫 PATH 与 WinGet 目录（嫌系统里的同名程序不可信） | 只有 PATH | 显式路径 → 应用同目录 → 平台位 → PATH；正式包未内置，按 §21 的指引装 |
+| 加密流 | `-decryption_key <key> -i url -map 0:v:0 -map 0:a? -c:v libx264/hw -crf 23 -c:a copy` | 同样 `-decryption_key` + libx264，`-c:a aac` | 同上；另外**先挑未加密流**，能直连就不转码（见下） |
+| HEVC/ByteVC2 | librempeg（固定 commit `cb1f8f3e…`）解 ByteVC2，ffmpeg 解 HEVC；只有选中 ByteVC2 片源时才转 | SDK 解 HEVC，ByteVC2 不处理 | 未动（红果主流仍是 HEVC/AVC） |
+| 播放通道 | `protocol.handle` 自定义协议 + `stream: true` 特权，`Readable.toWeb` 支持 Range | loopback HTTP + `http.ServeContent` | 不变（自定义协议在 WebKitGTK 播不了，见 §1） |
+| 工具缺失 | `LOCAL_MEDIA_TOOL_ERROR` + `get-ffmpeg-status` 让界面提示「请修复安装」 | 一句「未找到 ffmpeg」 | `FfmpegDiagnose` + 播放页修复指引 + 设置页诊断卡片（§21） |
+
+结论：它「直接就能播」是因为**安装包自带 ffmpeg（约 167MB）**，不是链路更聪明。这一点我们也可以照做，
+但会带来体积与 GPL/LGPL 分发义务（它随包附了 `COPYING.GPLv2/GPLv3/LGPLv2.1` 与 NOTICE）。
+
+### 22.1 顺手补的一处真实差异
+
+`docs/bytevc2-playback.md` 明确写过「不可把整部剧一律当 ByteVC2 处理……原始片源是正常 HEVC」——
+即红果**并非每集都加密**。我们原来的 `pickStreamIndex` 只看清晰度和「是否单文件」，同一集里若同时存在
+明文流与加密流，可能挑中加密那条，白白触发一次解密转码（一集要几十秒）。现在：
+
+- `pickStreamIndex` 改为**未加密流优先**（`isEncryptedStream`），若整集都是加密流再按老规则挑；
+  hls 即使明文也不优先（`hongguoResolve` 对 manifest 仍走解密，且会拒绝），保持「单文件优先」；
+- 新增 4 条 `TestPickStreamIndex` 用例覆盖「明文优先 / 全加密 / hls 与加密单文件 / 全是 manifest」；
+- `go test ./...`、`go vet`、门禁 `mygo-smoke.sh` 均 `[PASS]`。
+
+## 23. 内置 FFmpeg：Windows 包开箱即可解红果加密分集（2026-11-14）
+
+§22 的结论落地：照 hongguo-drama 的做法，**把 ffmpeg 打进包里**，而不是让用户自己装。
+
+### 23.1 实现
+
+| 部分 | 文件 | 说明 |
+|---|---|---|
+| 准备脚本 | [fetch-ffmpeg.sh](desktop/scripts/fetch-ffmpeg.sh) | 下载 Gyan `ffmpeg-7.1-essentials_build.zip`（88MB），校验固定 SHA-256，解压后取 `bin/ffmpeg.exe`；同时把上游 `LICENSE`（GPLv3 全文，674 行）落到 `resources/ffmpeg/COPYING.GPLv3`，并生成 `ffmpeg-NOTICE.txt` / `README.txt` |
+| 资源投放 | `desktop/resources/windows-amd64/ffmpeg.exe` | mygo 的约定：`resources/<goos>-<goarch>/` 只随该平台发布，构建时复制到可执行文件旁 |
+| 运行时查找 | [ffmpeg.go](desktop/ffmpeg.go) | 候选顺序 `FFMPEG_PATH` → **应用同目录**（含 `bin/`）→ 平台常见安装位 → `PATH`；`-version` 探测 + 进程内缓存 |
+| 诊断 | `Cinema.FfmpegDiagnose` | 设置页「环境诊断」、播放页「修复指引」把探测结果逐条列出 |
+| CI | [release-desktop.yml](.github/workflows/release-desktop.yml) | 新增 `Bundle ffmpeg` 步骤（`fetch-ffmpeg.sh all`，失败只警告、退化为系统 ffmpeg）；便携 zip 改为带上 `ffmpeg.exe` 与全部许可文本 |
+| 门禁 | [mygo-smoke.sh](desktop/scripts/mygo-smoke.sh) | 启动前断言内置 `resources/windows-amd64/ffmpeg.exe` 已就位（缺了给 warn，不挡 Linux 侧冒烟） |
+
+`.gitignore` 排除 `desktop/.cache/` 与两个平台的 ffmpeg 二进制：仓库不存 84MB 产物，构建期现下现校验。
+
+### 23.2 验证
+
+- `bash desktop/scripts/fetch-ffmpeg.sh windows`：SHA-256 与上游一致（`fa7d4d7e…24fc`），产出
+  `ffmpeg.exe` 84MB + GPLv3 全文；
+- `bash desktop/scripts/fetch-ffmpeg.sh all` 可重复执行（已有则复用压缩包与解压产物）；
+- `mygo build -platform windows/amd64` → `Copied 6 resources next to the executable`，
+  `build/windows-amd64/` 内 `私人影院.exe`(14.2MB) + `ffmpeg.exe`(84MB) + 许可文本齐全；
+  Linux 包同样带上 `ffmpeg/` 许可文本，`deb`/`rpm`/`tar.gz` 均含；
+- 交叉编译的 `ffmpeg.exe` 在 wine 下 `-version` 输出 `ffmpeg version 7.1-essentials_build-www.gyan.dev`；
+- 用 wine shim 把内置 exe 伪装成「应用同目录的 ffmpeg」再跑 `ffmpegCandidates` + `probeFfmpeg`，
+  应用同目录候选**优先命中**且版本可读（临时探针用例，验证后删除；常驻断言见
+  `TestFfmpegCandidatesPreferExeDirBeforePlatformDirs`）；
+- `go test ./...`、`go vet ./...`、`bash desktop/scripts/mygo-smoke.sh` → `[PASS]`。
+
+### 23.3 许可与已知限制
+
+- 内置的是 **GPLv3** 构建（`--enable-gpl` 含 libx264）。安装目录随附 `ffmpeg-LICENSE.txt`（GPLv3 全文）、
+  `COPYING.GPLv3`、`ffmpeg-NOTICE.txt`（来源/版本/用途/源码获取）与 `ffmpeg/README.txt`。
+  这意味着**整个分发包按 GPLv3 义务处理**：提供对应源码获取方式即可；若要闭源分发，需改用 LGPL 构建
+  或运行期下载（hongguo-drama 选择的是随包 + 附文本，我们与之一致）。
+- 便携 zip 增大约 35MB（压缩后 36MB）；安装包同样。
+- 本机 `makensis` 的 Stubs 缺失，NSIS 安装包只能由 CI 产出（`release-desktop.yml` 的
+  `apt-get install nsis` 环境正常），本地构建用 `-skip-installer`。
+
+## 24. 「检查更新」报 EOF：重试、可读提示与日志（2026-11-14）
+
+### 24.1 现象
+
+Windows 版设置页点「检查更新」直接红字：
+
+```
+mygo: checking for updates: Get
+"https://github.com/manchang-creator/PrivateCinema/releases/latest/download/update-windows-amd64.json": EOF
+```
+
+### 24.2 排查结论
+
+1. **清单本身没问题**：`releases/latest/download/update-*.json` 实测 200，v0.1.9 两个平台的清单都在；
+   `update-windows-amd64.json` 里 `version=0.1.9`、签名与 `private-cinema-0.1.9-windows-amd64.tar.gz` 对齐。
+2. **是传输被掐**：该 URL 会 302 跳到 `release-assets.githubusercontent.com`（Azure 后端），国内网络/代理
+   经常在首跳被 RST，Go 侧读 body 时就得到 `EOF`（不是 404、也不是超时）。本机复测三次分别
+   1.3s / 2.2s / 1.4s 全 200，说明是**间歇性**的。
+3. **mygo 自带重试偏薄**：`mygo.Updater` 内部对连接错误只重试两次（1s、3s），且 `EOF` 这类传输错误
+   发生在握手之后，往往三连失败；`CheckUpdate` 用的是**没有 deadline** 的 `context.Background()`，
+   出错时既没兜底等待，也没有任何日志落盘——用户只看到一句英文 EOF。
+
+### 24.3 改动
+
+- [update.go](desktop/update.go)：
+  - `checkWithRetry`：在 mygo 的两级重试外再补 **4 轮**（0 / 2s / 5s / 10s），
+    `ErrUpdatesDisabled` 与已取消的 context 立即放弃，不白等；
+  - `CheckUpdate` 给 45s 总超时（原来无 deadline），用户手点的一次检查不会因单跳失败立刻失败；
+  - `InstallUpdate` 最多重试 3 次（间隔 3s、6s），原先是"一次失败就报错"；
+  - 新增 `appendUpdateLog`：把每次尝试的原始错误写进 `<userData>/update.log`（RFC3339 时间戳），
+    启动静默自动更新也走同一套重试并留痕；
+  - `configureUpdate("")` 视为"userData 未就绪"，不再拼出相对路径 `update.log`。
+- [SettingsPage.tsx](desktop/src/ui/SettingsPage.tsx)：`friendlyUpdateError` 区分三类失败——
+  清单缺失（404）、**网络中断（EOF / reset / TLS / timeout → 提示开代理或手动下载）**、签名校验失败
+  （提示去 Releases 手动下载），并附原始错误。
+- [mygo-smoke.sh](desktop/scripts/mygo-smoke.sh)：`document.title` 断言改为轮询（最多 10s）。
+  之前是"启动后立刻读一次"，页面还没挂载完就会红着退出——本地偶发，与本次改动无关但会误报。
+
+### 24.4 验证
+
+- 新增 `update_test.go` 4 条：日志格式与时间戳、未注入 userData 不返回路径、`ErrUpdatesDisabled`
+  不触发重试（耗时 < 2s）、已取消 context 立即返回；
+- 另加一条**本地 flaky 服务器**用例：前两次 `Hijack` 后关连接（复现 EOF），第三次返回合法清单，
+  断言"重试后拿到清单、失败次数恰好 2 次"；
+- `go test ./...`、`go vet ./...` 全过；`bash desktop/scripts/mygo-smoke.sh` 连跑两次 `[PASS]`。
+
+### 24.5 已知限制
+
+网络层仍受用户环境支配：若出口把 `release-assets.githubusercontent.com` 整段封死，重试也救不回来，
+此时 UI 会提示"开启代理后重试 / 到 Releases 手动下载"。要彻底绕开，可以改用自建更新源
+（`mygo.Updater.SetSource`，同一套 ed25519 签名校验不变）或发布到国内可达的对象存储。
+
+## 25. 更新镜像：国内可达的自建源 + 安全回落（2026-11-15）
+
+§24 修好了「偶发 EOF」，但「release-assets 整段不可达」仍然无解。这一节落实自建更新源，
+完整使用说明见 [update-mirror.md](update-mirror.md)。
+
+### 25.1 设计
+
+- 用 mygo 的 `Updater.SetSource(UpdateSource)` 挂钩：清单与归档都改从镜像取；
+- **镜像不可信也没关系**：签名校验在 mygo 内部用编译进去的 ed25519 公钥完成，镜像只能"送文件"，
+  送错就装不上（最坏是更新失败，不会装进坏包）；
+- 清单必须含 `version/url/size/signature`，客户端读入时校验；可选的 `sha256` 字段由发布工具写入，
+  下载后二次比对；
+- **默认不启用**：没配 `PRIVATE_CINEMA_UPDATE_MIRROR` 时行为完全不变；
+- **可回落**：镜像失败自动再试 GitHub feed（`PRIVATE_CINEMA_MIRROR_STRICT=1` 可关掉），
+  过程写 `<userData>/update.log`。
+
+### 25.2 落地清单
+
+| 文件 | 内容 |
+|---|---|
+| [update_mirror.go](desktop/update_mirror.go) | `mirrorSource`（Manifest/Open）、URL 改写、`mirrorBase()` 校验（只收 https，回环允许 http）、`probeUpdateMirror`、`UpdateMirrorStatus`、`withGitHubFallback` |
+| [cmd/update-mirror/main.go](desktop/cmd/update-mirror/main.go) | 发布工具：`-in` 正式清单 → `-out` 镜像清单；`-base` 镜像根、`-target` 平台（缺省从文件名推断）、`-hash` 下载归档写 sha256；会拒绝「归档名与 target 不匹配」 |
+| [update.go](desktop/update.go) | `checkOnce`：镜像优先、失败回落；沿用 §24 的重试与日志 |
+| [main.go](desktop/main.go) | 启动时 `configureUpdateMirror()` + 后台 `probeUpdateMirror()`（不挡出窗口） |
+| [SettingsPage.tsx](desktop/src/ui/SettingsPage.tsx) | 「关于 → 更新源」显示镜像可用 / 已回落 GitHub / 未启用 + 地址与版本 |
+
+### 25.3 验证
+
+- `update-mirror` 对真实线上清单（v0.1.9）产出镜像清单：
+  `url → https://dl.example.com/private-cinema/windows-amd64/private-cinema-0.1.9-windows-amd64.tar.gz`，
+  delta 一并改写、`previous` 清空；`-target linux-amd64` 会明确报「归档与 target 不匹配」；
+- `mirrorSource` 对本地静态镜像实测：清单解析 → URL 改写到镜像 → `Open` 取回归档内容一致；
+- 新增单测 10 条（地址校验 / URL 布局 / 缺字段拒用 / HTTP 403 透出 / strict 开关 / 状态零值 /
+  线上清单结构快照的端到端）；
+- 调试中修掉一个真 bug：`bytesReader` 的 `Read` 在切片为空时返回 `(0, io.EOF)`，
+  而 `json.Unmarshal` 读到 `(0, nil)` 会一直循环 —— 改成 `bytes.NewReader`。
+  （表现是 `go test` 静默挂死、被 60s SIGTERM，正是它。）
+- `go test ./...`、`go vet ./...`、`bash desktop/scripts/mygo-smoke.sh` 全部通过。

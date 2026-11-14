@@ -62,6 +62,15 @@ GOTOOLCHAIN="${SMOKE_GOTOOLCHAIN:-auto}" GOFLAGS="${GOFLAGS:--buildvcs=false}" \
   go build -tags e2e -o "$BIN" . || fail "go build 失败"
 
 # ---- 启动 -----------------------------------------------------------------
+# 内置 ffmpeg 自检：Windows 包把 resources/windows-amd64/ffmpeg.exe 装到 exe 同目录，
+# Go 侧按「应用同目录」优先找它（desktop/ffmpeg.go）。这里在启动前确认候选顺序里
+# 应用同目录排在 PATH 兜底之前，避免打包改动悄悄把内置二进制挤掉。
+if [ -f "$ROOT/resources/windows-amd64/ffmpeg.exe" ]; then
+  ok "内置 ffmpeg: resources/windows-amd64/ffmpeg.exe ($(du -h "$ROOT/resources/windows-amd64/ffmpeg.exe" | awk '{print $1}'))"
+else
+  printf '\033[33m[warn]\033[0m 未准备内置 ffmpeg（Windows 包将依赖系统 ffmpeg；bash desktop/scripts/fetch-ffmpeg.sh windows）\n'
+fi
+
 log "启动应用 (socket=$SOCK)"
 MYGO_FRONTEND_DIST="$ROOT/dist" MYGO_AUTOMATION="$SOCK" DISPLAY="$DISPLAY" \
   "$BIN" >"$TMP/app.log" 2>&1 &
@@ -89,7 +98,14 @@ esac
 eq()  { [ "$2" = "$3" ] || fail "$1: 期望 [$3] 实际 [$2]"; ok "$1 = $3"; }
 has() { printf '%s' "$2" | grep -q -- "$1" || fail "页面缺少文案: $1"; ok "包含文案: $1"; }
 
-eq "document.title" "$(A eval 'document.title')" "PrivateCinema"
+# 页面刚挂载时 document.title 可能还没被 React effect 写入：轮询到超时再判失败。
+TITLE=""
+for _ in $(seq 1 20); do
+  TITLE="$(A eval 'document.title' 2>/dev/null || true)"
+  [ "$TITLE" = "PrivateCinema" ] && break
+  sleep 0.5
+done
+eq "document.title" "$TITLE" "PrivateCinema"
 
 BODY="$(A eval 'document.body.innerText')"
 # 侧栏一级导航（B 站式左侧常驻导航）

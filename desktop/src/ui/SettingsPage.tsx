@@ -3,7 +3,7 @@
 // 外观、播放偏好、数据清理、关于与更新。分组卡片布局，参考腾讯视频的「设置」页。
 
 import { useCallback, useEffect, useState, type JSX, type ReactNode } from 'react'
-import type { AppInfo, UpdateInfo } from '@private-cinema/core/shared'
+import type { AppInfo, FfmpegStatus, UpdateInfo, UpdateMirror } from '@private-cinema/core/shared'
 import { applyTheme, getThemePref, saveTheme, type ThemePref } from '../theme'
 import {
   useAutoNext,
@@ -27,10 +27,21 @@ function errMsg(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason)
 }
 
+/**
+ * 把更新失败翻成能指导操作的中文。
+ * 常见三类：发布没带清单（404）、GitHub 被网络/代理掐断（EOF / TLS / timeout）、签名校验不过。
+ * 原始错误附在后面，方便用户复制给开发者。
+ */
 function friendlyUpdateError(reason: unknown): string {
   const msg = errMsg(reason)
   if (/404|\bnot found\b/i.test(msg)) {
     return '暂无可用的在线更新清单（最新发布未附 update-*.json），可到 Releases 手动下载。'
+  }
+  if (/\bEOF\b|unexpected EOF|connection reset|TLS handshake|i\/o timeout|no such host|timeout/i.test(msg)) {
+    return `连不上 GitHub 的更新清单（网络被中断，常见于代理/防火墙拦截 release 静态资源）。请稍后重试，或开启代理后重试；也可到 Releases 手动下载。原始错误：${msg}`
+  }
+  if (/signature|verif/i.test(msg)) {
+    return `更新包签名校验未通过，已拒绝安装。请到 Releases 手动下载。原始错误：${msg}`
   }
   return msg
 }
@@ -45,6 +56,9 @@ export function SettingsPage(): JSX.Element {
   const [compact, setCompact] = useState(false)
   const [onTop, setOnTop] = useState(false)
   const [windowErr, setWindowErr] = useState<string | null>(null)
+  const [mirror, setMirror] = useState<UpdateMirror | null>(null)
+  const [ffmpeg, setFfmpeg] = useState<FfmpegStatus | null>(null)
+  const [ffmpegBusy, setFfmpegBusy] = useState(false)
   const [autoNext, setAutoNext] = useAutoNext()
   const [rate, setRate] = usePlayerRate()
   const [view, setView] = useViewMode()
@@ -69,7 +83,28 @@ export function SettingsPage(): JSX.Element {
       .alwaysOnTop()
       .then(setOnTop)
       .catch((reason: unknown) => setWindowErr(errMsg(reason)))
+    // 更新镜像状态：没配镜像时后端返回零值，界面上不出现这一块。
+    void window.cinema
+      .updateMirrorStatus()
+      .then(setMirror)
+      .catch(() => setMirror(null))
   }, [])
+
+  // ffmpeg 诊断：红果加密分集离不开它，装完/换路径后在这里一键复查。
+  const diagnose = useCallback(async () => {
+    setFfmpegBusy(true)
+    try {
+      setFfmpeg(await window.cinema.ffmpegDiagnose())
+    } catch (reason) {
+      setMessage(errMsg(reason))
+    } finally {
+      setFfmpegBusy(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void diagnose()
+  }, [diagnose])
 
   const chooseTheme = useCallback((next: ThemePref) => {
     setPref(next)
@@ -214,6 +249,47 @@ export function SettingsPage(): JSX.Element {
           </Row>
         </Card>
 
+        <Card title="环境诊断" sub="Diagnostics">
+          <Row
+            label="ffmpeg"
+            hint={
+              ffmpeg === null
+                ? '正在探测…'
+                : ffmpeg.available
+                  ? (ffmpeg.version || ffmpeg.path)
+                  : '未找到可用 ffmpeg：红果加密分集无法解密播放'
+            }
+          >
+            <div className="settings-actions">
+              <span className={ffmpeg?.available === true ? 'ffmpeg-status ok' : 'ffmpeg-status bad'}>
+                {ffmpeg === null ? '…' : ffmpeg.available ? '可用' : '缺失'}
+              </span>
+              <button type="button" className="btn-glass small" disabled={ffmpegBusy} onClick={() => void diagnose()}>
+                <Icon name="refresh" size={14} />
+                {ffmpegBusy ? '探测中…' : '重新检测'}
+              </button>
+            </div>
+          </Row>
+          {ffmpeg !== null && !ffmpeg.available && (
+            <div className="settings-block">
+              <p className="hint">{ffmpeg.hint}</p>
+              <ul className="ffmpeg-help-checked">
+                {ffmpeg.checked.map((entry) => (
+                  <li key={entry.path} className={entry.ok ? 'ok' : ''}>
+                    <code>{entry.path}</code>
+                    <span>{entry.ok ? '可用' : (entry.reason ?? '不存在')}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {ffmpeg !== null && ffmpeg.available && (
+            <p className="hint">
+              解密缓存：<code>{ffmpeg.cacheDir}</code>
+            </p>
+          )}
+        </Card>
+
         <Card title="数据" sub="Data">
           <Row label="观看历史" hint={`${history.list.length} 条记录`}>
             <button type="button" className="btn-glass small" onClick={history.clear}>
@@ -233,6 +309,22 @@ export function SettingsPage(): JSX.Element {
           <Row label="版本" hint={info?.platform ?? ''}>
             <span className="mono">v{info?.version ?? '…'}</span>
           </Row>
+          {mirror !== null && mirror.base !== '' && (
+            <Row
+              label="更新源"
+              hint={
+                mirror.enabled
+                  ? mirror.reachable
+                    ? `镜像可用（版本 ${mirror.version || '未知'}）· ${mirror.base}`
+                    : `镜像不可达，已回落到 GitHub · ${mirror.error}`
+                  : `已配置但本构建未启用更新 · ${mirror.base}`
+              }
+            >
+              <span className={mirror.reachable ? 'ffmpeg-status ok' : 'ffmpeg-status bad'}>
+                {mirror.enabled ? (mirror.reachable ? '镜像' : '回落 GitHub') : '未启用'}
+              </span>
+            </Row>
+          )}
           <Row label="自动更新" hint="启动时静默检查新版本">
             <Switch checked={autoUpdate} onChange={toggleAutoUpdate} label="自动更新" />
           </Row>

@@ -14,6 +14,7 @@ import {
   type DanmakuItem,
   type DisplayBrightness,
   type Episode,
+  type FfmpegStatus,
   type MediaItem,
   type RemoteLine,
 } from '@private-cinema/core/shared'
@@ -39,6 +40,15 @@ interface Props {
   startPosition: number
   onSelectEpisode: (episode: Episode) => void
   onExit: () => void
+}
+
+/**
+ * 给解析错误补「线路解析失败：」前缀。
+ * 后端消息本身已经是完整中文句子（如「该集暂无可用线路」），个别消息已自带前缀时不再叠加。
+ */
+function withResolvePrefix(message: string): string {
+  const text = message.trim() === '' ? '未知错误' : message.trim()
+  return text.startsWith('线路解析失败') ? text : `线路解析失败：${text}`
 }
 
 /** 进度落盘间隔（秒）：过密会频繁写盘，过疏会丢进度。 */
@@ -93,6 +103,11 @@ export function PlayerScreen({
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null)
   // 远端解析出的地址类型：mp4 直接喂 <video>，hls 交给 hls.js
   const [playbackKind, setPlaybackKind] = useState<'mp4' | 'hls' | null>(null)
+  // ffmpeg 缺失/不可用是红果加密分集最常见的失败原因；命中了就额外给一条可点开的修复指引。
+  const [ffmpegProblem, setFfmpegProblem] = useState(false)
+  const [showFfmpegHelp, setShowFfmpegHelp] = useState(false)
+  const [ffmpegStatus, setFfmpegStatus] = useState<FfmpegStatus | null>(null)
+  const [ffmpegChecking, setFfmpegChecking] = useState(false)
 
   useEffect(() => {
     if (!isRemote) {
@@ -109,6 +124,8 @@ export function PlayerScreen({
     let cancelled = false
     setResolving(true)
     setError(null)
+    setFfmpegProblem(false)
+    setShowFfmpegHelp(false)
     setResolvedSrc(null)
     void window.cinema
       .remoteResolve(remoteProvider, token, selectedLineId ?? undefined)
@@ -120,7 +137,9 @@ export function PlayerScreen({
       })
       .catch((cause: unknown) => {
         if (cancelled) return
-        setError(`线路解析失败：${cause instanceof Error ? cause.message : String(cause)}`)
+        const message = cause instanceof Error ? cause.message : String(cause)
+        setFfmpegProblem(message.includes('ffmpeg'))
+        setError(withResolvePrefix(message))
       })
       .finally(() => {
         if (!cancelled) setResolving(false)
@@ -251,6 +270,19 @@ export function PlayerScreen({
       setError(cause instanceof Error ? cause.message : String(cause))
     }
   }, [episode.filePath, episode.title])
+
+  // ffmpeg 诊断：把探测过的候选路径、版本、建议一次列清，用户照着改 PATH 或指定路径即可。
+  const diagnoseFfmpeg = useCallback(async () => {
+    setFfmpegChecking(true)
+    try {
+      setFfmpegStatus(await window.cinema.ffmpegDiagnose())
+    } catch (cause) {
+      setFfmpegStatus(null)
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setFfmpegChecking(false)
+    }
+  }, [])
 
   // ==================== 视频事件 ====================
 
@@ -574,10 +606,76 @@ export function PlayerScreen({
 
         {resolving && <div className="player-resolving">线路解析中…</div>}
 
+        {showFfmpegHelp && (
+          <div className="player-dialog ffmpeg-help" role="dialog" aria-label="ffmpeg 修复指引">
+            <div className="player-dialog-head">
+              <b>红果需要 ffmpeg 解密播放</b>
+              <button type="button" onClick={() => setShowFfmpegHelp(false)} aria-label="关闭">
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+            <ol className="ffmpeg-help-steps">
+              <li>
+                Windows 用 <code>winget install Gyan.FFmpeg</code>（或 <code>choco install ffmpeg</code>）安装，
+                <b>装完要完全退出本应用再打开</b> —— 已在运行的进程读不到新写入的 PATH。
+              </li>
+              <li>
+                便携版：把 <code>ffmpeg.exe</code> 放到 <code>私人影院.exe</code> 同一个文件夹即可，无需改 PATH。
+              </li>
+              <li>
+                也可以自己指定路径：设环境变量 <code>FFMPEG_PATH</code> 为 ffmpeg 完整路径（如{' '}
+                <code>C:fmpeginfmpeg.exe</code>）后重开应用。
+              </li>
+              <li>本机验证：命令行执行 <code>ffmpeg -version</code> 能打印版本号，应用才能用它解密。</li>
+            </ol>
+            <div className="ffmpeg-help-actions">
+              <button
+                type="button"
+                className="btn-glass small"
+                disabled={ffmpegChecking}
+                onClick={() => void diagnoseFfmpeg()}
+              >
+                <Icon name="refresh" size={14} />
+                {ffmpegChecking ? '探测中…' : '检测本机 ffmpeg'}
+              </button>
+              {ffmpegStatus !== null && (
+                <span className={ffmpegStatus.available ? 'ffmpeg-status ok' : 'ffmpeg-status bad'}>
+                  {ffmpegStatus.available
+                    ? `可用：${ffmpegStatus.version || ffmpegStatus.path}`
+                    : '未找到可用的 ffmpeg'}
+                </span>
+              )}
+            </div>
+            {ffmpegStatus !== null && ffmpegStatus.checked.length > 0 && (
+              <ul className="ffmpeg-help-checked">
+                {ffmpegStatus.checked.map((entry) => (
+                  <li key={entry.path} className={entry.ok ? 'ok' : ''}>
+                    <code>{entry.path}</code>
+                    <span>{entry.ok ? '可用' : (entry.reason ?? '不存在')}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {ffmpegStatus !== null && ffmpegStatus.hint !== '' && (
+              <p className="hint">{ffmpegStatus.hint}</p>
+            )}
+          </div>
+        )}
+
         {error !== null && (
           <div className="player-error">
             <Icon name="info" size={18} />
             <span>{error}</span>
+            {ffmpegProblem && (
+              <button
+                type="button"
+                className="btn-glass small"
+                onClick={() => setShowFfmpegHelp((open) => !open)}
+              >
+                <Icon name="settings" size={14} />
+                修复指引
+              </button>
+            )}
             {!isRemote && (
               <button type="button" className="btn-glass small" onClick={() => void openExternal()}>
                 <Icon name="expand" size={14} />

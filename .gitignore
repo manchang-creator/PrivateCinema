@@ -14,3 +14,8 @@ Tuist/Dependencies/
 
 # 本地发版产物（构建输出，不入库）
 release/
+
+# 内置 ffmpeg：构建期由 desktop/scripts/fetch-ffmpeg.sh 下载并校验，不入库
+desktop/.cache/
+desktop/resources/windows-amd64/ffmpeg.exe
+desktop/resources/linux-amd64/ffmpeg

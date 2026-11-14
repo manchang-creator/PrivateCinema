@@ -54,6 +54,14 @@ func main() {
 			filepath.Join(userData, "openhongguo", "anonymous.json"),
 		)
 		configureUpdate(userData)
+		// 后台预热 ffmpeg 探测：Windows 上装完 ffmpeg 不重开应用、或 ffmpeg.exe 放在应用同目录时，
+		// 播放前就能确定可用路径，失败也能立刻给出准确的安装指引。
+		warmFfmpeg(currentHongguoConfig().ffmpegPath)
+		// 更新镜像（国内可达的自建源）：配了 PRIVATE_CINEMA_UPDATE_MIRROR 才生效，
+		// 签名校验仍由 mygo 用内置公钥完成；探测也在后台，不挡出窗口。
+		if configureUpdateMirror() {
+			go probeUpdateMirror()
+		}
 
 		// 3) 主窗口。
 		win := mygo.NewWindow(mygo.WindowOptions{

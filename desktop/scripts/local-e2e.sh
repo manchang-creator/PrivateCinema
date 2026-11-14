@@ -170,6 +170,11 @@ ok "截图: $OUT_DIR/2-player-subtitle.png"
 log "校验弹幕层"
 js "!!document.querySelector('.danmaku-canvas')" | grep -q true || fail "未找到弹幕 canvas"
 ok "弹幕 canvas 已挂载"
+# 弹幕开关持久化在 localStorage（danmaku.settings），此前跑过的用例可能把它留成「关」。
+# 这里先把开关归一化成「开」，再断言初始态，避免用例之间互相污染。
+js "(()=>{const k='danmaku.settings';try{const raw=localStorage.getItem(k);const cur=raw?JSON.parse(raw):{};localStorage.setItem(k,JSON.stringify({...cur,enabled:true}));}catch{}return 'seeded';})()" >/dev/null
+js "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); if(b&&!b.classList.contains('on')) b.click(); return true;})()" >/dev/null
+sleep 0.3
 has_text "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); return (b&&b.classList.contains('on'))?'弹幕 开':'弹幕 关';})()" "弹幕 开" "弹幕开关初始态"
 js "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); b&&b.click(); return true;})()" >/dev/null
 has_text "(()=>{const b=document.querySelector('.player-controls [aria-label=\"弹幕开关\"]'); return (b&&b.classList.contains('on'))?'弹幕 开':'弹幕 关';})()" "弹幕 关" "弹幕开关切换后"

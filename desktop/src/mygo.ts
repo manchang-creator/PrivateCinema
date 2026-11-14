@@ -61,6 +61,33 @@ export interface Episode {
   episodeToken?: string;
 }
 
+/** FfmpegChecked 一条候选探测记录。 */
+export interface FfmpegChecked {
+  path: string;
+  ok: boolean;
+  reason?: string;
+}
+
+/**
+ * FfmpegStatus 是设置页/排障用的环境诊断结果。
+ * 之所以要有这个通道：Windows 用户最常见的失败就是「装了 ffmpeg 但应用没看到」，
+ * 报错只有一句话很难定位；这里把探测过的候选、版本、建议一次性吐给界面。
+ */
+export interface FfmpegStatus {
+  /** Available 表示找到了能跑的 ffmpeg。 */
+  available: boolean;
+  /** Path 是最终使用的 ffmpeg 完整路径。 */
+  path: string;
+  /** Version 是 `ffmpeg -version` 的第一行。 */
+  version: string;
+  /** Checked 是依次尝试过的路径（含失败项），用于确认到底找过哪里。 */
+  checked: FfmpegChecked[];
+  /** Hint 是安装/指定路径的建议文案。 */
+  hint: string;
+  /** CacheDir 是解密产物缓存目录，便于清理与确认写权限。 */
+  cacheDir: string;
+}
+
 /** LibraryScan 扫描结果。 */
 export interface LibraryScan {
   items: MediaItem[];
@@ -189,6 +216,20 @@ export interface UpdateInfo {
   date: string;
 }
 
+/** updateMirrorStatus 给设置页看的镜像状态。 */
+export interface UpdateMirror {
+  /** Enabled 表示当前构建是否在用镜像。 */
+  enabled: boolean;
+  /** Base 是镜像根地址（未配置为空）。 */
+  base: string;
+  /** Reachable 是启动探测结果：清单能取到且格式正确。 */
+  reachable: boolean;
+  /** Version 是镜像上清单声明的版本。 */
+  version: string;
+  /** Error 是探测失败原因（可达时为空）。 */
+  error: string;
+}
+
 /** WatchProgress 播放进度。 */
 export interface WatchProgress {
   mediaId: string;
@@ -221,6 +262,10 @@ export const Cinema = {
   /** CompactMode 读取「小窗模式」开关。 */
   compactMode(): Promise<boolean> {
     return call("Cinema.CompactMode");
+  },
+  /** FfmpegDiagnose 现场再探测一遍所有候选，返回可用性、版本与尝试记录。 */
+  ffmpegDiagnose(): Promise<FfmpegStatus> {
+    return call("Cinema.FfmpegDiagnose");
   },
   /** FindSubtitle 在视频同目录下按同名规则查找字幕，找到则返回文本内容。 */
   findSubtitle(videoPath: string): Promise<SubtitleFile | null> {
@@ -321,5 +366,9 @@ export const Cinema = {
   /** SetCompactMode 切换小窗模式：改窗口尺寸与最小尺寸，并把偏好落盘。 */
   setCompactMode(enabled: boolean): Promise<void> {
     return call("Cinema.SetCompactMode", enabled);
+  },
+  /** UpdateMirrorStatus 返回镜像状态；不联网（读启动时探测结果）。 */
+  updateMirrorStatus(): Promise<UpdateMirror> {
+    return call("Cinema.UpdateMirrorStatus");
   },
 } as const;

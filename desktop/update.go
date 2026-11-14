@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -43,10 +44,14 @@ var (
 	pendingUpdate   *mygo.Update
 )
 
-// configureUpdate 由主进程启动时注入 userData 目录。
+// configureUpdate 由主进程启动时注入 userData 目录；空串表示「还没就绪」。
 func configureUpdate(userData string) {
 	updateMu.Lock()
-	updatePrefsPath = filepath.Join(userData, "app-settings.json")
+	if userData == "" {
+		updatePrefsPath = ""
+	} else {
+		updatePrefsPath = filepath.Join(userData, "app-settings.json")
+	}
 	updatePrefs = nil
 	updateMu.Unlock()
 }
@@ -112,13 +117,89 @@ func (c *Cinema) AppInfo() (AppInfo, error) {
 	}, nil
 }
 
+// updateLogPath 是 userData 下的更新日志：网络故障（GFW / 代理 / CDN EOF）在界面上
+// 只有一句话，落盘后才能事后定位是哪一跳断的。
+func updateLogPath() string {
+	updateMu.Lock()
+	prefs := updatePrefsPath
+	updateMu.Unlock()
+	if prefs == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(prefs), "update.log")
+}
+
+// appendUpdateLog 追加一行带时间戳的更新日志；写失败不影响主流程。
+func appendUpdateLog(format string, args ...any) {
+	path := updateLogPath()
+	if path == "" {
+		return
+	}
+	line := time.Now().Format(time.RFC3339) + " " + fmt.Sprintf(format, args...) + "\n"
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	_, _ = f.WriteString(line)
+	_ = f.Close()
+}
+
+// checkOnce 检查一轮。镜像启用时先走镜像，失败（且允许回落）再走 GitHub feed。
+func checkOnce(ctx context.Context) (*mygo.Update, error) {
+	up, err := mygo.Updater.Check(ctx)
+	if err == nil || !mirrorActive || !shouldFallbackToGitHub() {
+		return up, err
+	}
+	return withGitHubFallback(ctx, err, func() (*mygo.Update, error) {
+		return mygo.Updater.Check(ctx)
+	})
+}
+
+// checkWithRetry 在 mygo 自带的两级重试（1s / 3s）之外再补几轮。
+// 实测 Windows 上首次访问 GitHub 的 release 资产（302 跳到 release-assets.githubusercontent.com）
+// 常被 RST 成 "EOF"，而稍后同一请求就能成功；用户点一次「检查更新」不该因为这一下就失败。
+func checkWithRetry(ctx context.Context) (*mygo.Update, error) {
+	backoff := []time.Duration{0, 2 * time.Second, 5 * time.Second, 10 * time.Second}
+	var lastErr error
+	for attempt, wait := range backoff {
+		if wait > 0 {
+			select {
+			case <-ctx.Done():
+				appendUpdateLog("check aborted after %d attempts: %v", attempt, ctx.Err())
+				return nil, lastErr
+			case <-time.After(wait):
+			}
+		}
+		up, err := checkOnce(ctx)
+		if err == nil {
+			if attempt > 0 {
+				appendUpdateLog("check succeeded after %d attempts", attempt+1)
+			}
+			return up, nil
+		}
+		lastErr = err
+		appendUpdateLog("check attempt %d/%d failed: %v", attempt+1, len(backoff), err)
+		// 构建未启用更新这类错误重试没有意义。
+		if errors.Is(err, mygo.ErrUpdatesDisabled) || ctx.Err() != nil {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
 // CheckUpdate 检查是否有新版本。未启用更新的构建直接返回 enabled=false。
 func (c *Cinema) CheckUpdate(ctx context.Context) (UpdateInfo, error) {
 	info := UpdateInfo{Enabled: mygo.Updater.Enabled(), Current: currentVersion()}
 	if !info.Enabled {
 		return info, nil
 	}
-	up, err := mygo.Updater.Check(ctx)
+	// 检查更新是用户点出来的动作：给足 45s（含重试），别让首跳 EOF 直接报错。
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 45*time.Second)
+		defer cancel()
+	}
+	up, err := checkWithRetry(ctx)
 	if err != nil {
 		return info, err
 	}
@@ -145,7 +226,22 @@ func (c *Cinema) InstallUpdate(ctx context.Context) error {
 	if up == nil {
 		return errors.New("没有可安装的更新，请先检查更新")
 	}
-	return up.Install(ctx, nil)
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return err
+			case <-time.After(time.Duration(attempt) * 3 * time.Second):
+			}
+		}
+		if err = up.Install(ctx, nil); err == nil {
+			appendUpdateLog("installed %s", up.Version)
+			return nil
+		}
+		appendUpdateLog("install %s attempt %d/3 failed: %v", up.Version, attempt+1, err)
+	}
+	return err
 }
 
 // RestartApp 重启应用，让已安装的更新生效。
@@ -177,12 +273,19 @@ func autoUpdateOnStart() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	up, err := mygo.Updater.Check(ctx)
-	if err != nil || up == nil {
+	up, err := checkWithRetry(ctx)
+	if err != nil {
+		appendUpdateLog("auto-update: %v", err)
+		return
+	}
+	if up == nil {
+		appendUpdateLog("auto-update: already the latest (%s)", currentVersion())
 		return
 	}
 	if err := up.Install(ctx, nil); err != nil {
+		appendUpdateLog("auto-update: install %s failed: %v", up.Version, err)
 		return
 	}
+	appendUpdateLog("auto-update: installed %s, relaunching", up.Version)
 	mygo.App.Relaunch()
 }

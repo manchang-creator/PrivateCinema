@@ -95,6 +95,9 @@ func TestPickStreamIndex(t *testing.T) {
 	mk := func(def, quality string, hls, dash bool) model.Stream {
 		return model.Stream{Definition: def, Quality: quality, HLS: hls, Dash: dash}
 	}
+	mkProtected := func(def string, hls, dash bool) model.Stream {
+		return model.Stream{Definition: def, HLS: hls, Dash: dash, Protected: true}
+	}
 
 	cases := []struct {
 		name    string
@@ -139,6 +142,33 @@ func TestPickStreamIndex(t *testing.T) {
 			streams: []model.Stream{mk("360p", "", false, false), mk("480p", "", false, false)},
 			lineID:  "hg-9",
 			want:    1,
+		},
+		{
+			// 红果并非每集都加密：同一集里明文流能直接播，优先用它，省掉一次 ffmpeg 解密转码。
+			name: "明文流优先于加密流",
+			streams: []model.Stream{
+				mkProtected("360p", false, false),
+				mkProtected("480p", false, false),
+				mk("480p", "", false, false),
+			},
+			want: 2,
+		},
+		{
+			name:    "全加密时仍按清晰度优先级",
+			streams: []model.Stream{mkProtected("360p", false, false), mkProtected("480p", false, false)},
+			want:    1,
+		},
+		{
+			// HLS 默认也走解密转码（hongguoResolve 会拒绝 manifest），所以这里不为了「明文」
+			// 去挑一条同样要 ffmpeg 的 hls，仍按单文件优先。
+			name:    "明文 hls 与单文件加密时仍选单文件",
+			streams: []model.Stream{mkProtected("480p", false, false), mk("720p", "", true, false)},
+			want:    0,
+		},
+		{
+			name:    "全加密且全是 manifest 时退回索引 0",
+			streams: []model.Stream{mkProtected("480p", true, false), mkProtected("720p", false, true)},
+			want:    0,
 		},
 	}
 

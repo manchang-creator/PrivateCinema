@@ -3369,6 +3369,113 @@ select {
   overflow-y: auto;
 }
 
+/* ==================== ffmpeg 修复指引（播放页） ==================== */
+/* 红果加密分集靠 ffmpeg 解密；Windows 上「装了但应用没看到」最常见，
+   所以把「怎么装 / 装哪 / 现在探测到哪些路径」直接摆在出错的画面上。 */
+.player-dialog.ffmpeg-help {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translateX(-50%);
+  z-index: 26;
+  width: min(560px, 86%);
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--hairline-strong);
+  background: rgba(16, 17, 23, 0.97);
+  box-shadow: var(--shadow-pop);
+  backdrop-filter: blur(20px);
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
+  animation: pop-in 0.14s ease;
+}
+.ffmpeg-help .player-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ffmpeg-help .player-dialog-head button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--text-2);
+}
+.ffmpeg-help-steps {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-2);
+}
+.ffmpeg-help-steps code,
+.ffmpeg-help-checked code,
+.ffmpeg-help .hint code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  word-break: break-all;
+}
+.ffmpeg-help-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ffmpeg-status {
+  font-size: 12px;
+  font-weight: 600;
+}
+.ffmpeg-status.ok {
+  color: #6ee7a8;
+}
+.ffmpeg-status.bad {
+  color: var(--danger);
+}
+.ffmpeg-help-checked {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.ffmpeg-help-checked li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.ffmpeg-help-checked li.ok {
+  color: #6ee7a8;
+  background: rgba(110, 231, 168, 0.08);
+}
+.ffmpeg-help-checked li span {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .danmaku-panel {
   position: absolute;
   right: 20px;

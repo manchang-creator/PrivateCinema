@@ -1,0 +1,12 @@
+本应用内置 FFmpeg（Windows x64）。
+
+来源：https://github.com/GyanD/codexffmpeg（ffmpeg 7.1 essentials build）
+许可：GPL v3（含 libx264 等 GPL 组件），完整许可见同目录 ffmpeg-LICENSE.txt、
+      以及 resources/ffmpeg/COPYING.GPLv2 / COPYING.GPLv3 / COPYING.LGPLv2.1。
+用途：仅用于在本地把用户有权观看的内容解密/转码为可播放的 H.264，不经任何网络转发。
+
+FFmpeg 是 FFmpeg 项目（https://ffmpeg.org）的商标，本应用与该项目无隶属关系。
+对应源码：下载同一版本的源码包 https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz ，
+按 GPLv3 提供；如你拿到的是二进制分发，可向发布方索取与本二进制一致的构建配置
+（--enable-gpl --enable-libx264 --enable-libzimg …，详见
+ https://github.com/GyanD/codexffmpeg 的 build 说明）。

@@ -28,6 +28,8 @@ export async function installCinemaBridge(): Promise<void> {
     setBrightness: (id: string, value: number) => Cinema.setBrightness(id, value),
     playExternal: (filePath: string) => Cinema.playExternal(filePath),
     remoteHome: (provider: Parameters<typeof Cinema.remoteHome>[0]) => Cinema.remoteHome(provider),
+    ffmpegDiagnose: () => Cinema.ffmpegDiagnose(),
+    updateMirrorStatus: () => Cinema.updateMirrorStatus(),
     remoteBrowse: (provider: Parameters<typeof Cinema.remoteBrowse>[0], kind: string | null, page: number) =>
       Cinema.remoteBrowse(provider, kind ?? "", page),
     remoteSearch: (provider: Parameters<typeof Cinema.remoteSearch>[0], keyword: string, page: number) =>

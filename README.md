@@ -28,6 +28,41 @@ go test ./...          # Go 后端单测
 本地文件端到端（选片→播放→字幕/弹幕→续播）：`bash desktop/scripts/local-e2e.sh`。
 构建环境坑（`GOTOOLCHAIN=auto`、`-buildvcs=false`、webkit2gtk/GTK3/ffmpeg 依赖）见 `AGENTS.md`。
 
+### 更新源（可选自建镜像）
+
+在线更新默认读 GitHub Release 的 `update-*.json`；该地址会跳到 `release-assets.githubusercontent.com`，
+国内网络常被掐成 `EOF`。配置镜像即可绕开，**签名校验仍在应用内完成**，镜像无需可信：
+
+```bash
+export PRIVATE_CINEMA_UPDATE_MIRROR=https://dl.example.com/private-cinema   # 客户端启用
+cd desktop && go run ./cmd/update-mirror -in build/windows-amd64/update-windows-amd64.json \
+  -out dist-mirror/windows-amd64/update-windows-amd64.json \
+  -base https://dl.example.com/private-cinema -target windows-amd64 -hash      # 发布期生成镜像清单
+```
+
+镜像失败会自动回落 GitHub（`PRIVATE_CINEMA_MIRROR_STRICT=1` 可关闭），过程记录在
+`<userData>/update.log`，设置页「关于 → 更新源」会显示当前状态。完整目录结构与发布步骤见
+[`docs/update-mirror.md`](docs/update-mirror.md)。
+
+### 内置 FFmpeg（红果加密分集必需）
+
+在线片源「红果短剧」的分集是 CENC 加密的 HEVC，WebView 解不了，必须用 FFmpeg
+`-decryption_key` 解密并转码成本地 H.264。**Windows 安装包/便携包已内置 `ffmpeg.exe`**，
+装完即可播放；Linux 发布包也带一份，同时仍支持系统 `ffmpeg`。
+
+```bash
+bash desktop/scripts/fetch-ffmpeg.sh windows   # 构建前准备（下载 + SHA-256 校验 + 解出许可文本）
+bash desktop/scripts/fetch-ffmpeg.sh all       # CI 打 Windows + Linux 包时用
+```
+
+- 二进制不入库（`.gitignore`），构建期现下现校验；版本与哈希写死在脚本顶部。
+- 运行时查找顺序（`desktop/ffmpeg.go`）：`FFMPEG_PATH` → **应用同目录** → 平台常见安装位（WinGet /
+  `ProgramFiles\ffmpeg\bin` / Homebrew / `/usr/local/bin`）→ `PATH`；找不到时设置页「环境诊断」
+  与播放页「修复指引」会列出探测过的每个路径。
+- **许可**：内置的是 Gyan 的 essentials 构建（GPLv3，含 libx264）。分发时必须随附 GPL 全文与
+  NOTICE —— 安装目录里已有 `ffmpeg-LICENSE.txt`、`ffmpeg-NOTICE.txt`、`COPYING.GPLv3`、
+  `ffmpeg/README.txt`（源码获取方式与构建来源）。改 ffmpeg 版本时同步更新这两份文本。
+
 > 系统专属能力：Windows 走 DXVA2（纯 Go `syscall`）调亮度；Linux 走 sysfs 背光 + `ddcutil`（DDC/CI）外接屏亮度，
 > 硬件背光不可写且运行在 X11 时回退 `xrandr` 软件调光。应用本身不提权，检测不到权限会返回带原因的提示。
 
