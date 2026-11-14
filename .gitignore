@@ -11,3 +11,6 @@ build/
 *.xcodeproj/
 *.xcworkspace/
 Tuist/Dependencies/
+
+# 本地发版产物（构建输出，不入库）
+release/
