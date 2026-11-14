@@ -124,6 +124,9 @@ select {
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  /* 关键：显式给隐式行一个上限，否则行高被内容撑高，.viewport 的 overflow-y 不生效、
+     内容溢出到窗口外既没有滚动条也吃不到滚轮事件 */
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   background:
     radial-gradient(120% 80% at 8% -10%, var(--accent-soft), transparent 55%),
@@ -131,11 +134,13 @@ select {
     var(--bg);
 }
 
+/* 侧栏自身在窗口内滚动，避免折叠/窄高时导航被切掉 */
 .sidebar {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
   padding: 14px 12px 16px;
   border-right: 1px solid var(--hairline);
   background: rgba(8, 9, 13, 0.55);
@@ -247,6 +252,7 @@ select {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   height: 100%;
 }
 
@@ -419,8 +425,9 @@ select {
 }
 
 .viewport {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -666,16 +673,61 @@ select {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  /* 竖版封面放大后居中偏右，避免主视觉被左侧信息区压掉；再叠一层模糊去掉像素感 */
-  object-position: 58% 18%;
-  transform: scale(1.06);
-  filter: blur(2px) saturate(1.08) brightness(0.78);
-  animation: hero-zoom 12s ease-out both;
+  /* 兜底（只有竖版海报、又不足一屏时）：取人物区而不是题字区，不做放大 */
+  object-position: 50% 38%;
+  filter: saturate(1.04) brightness(0.82);
 }
-@keyframes hero-zoom {
-  from {
-    transform: scale(1.18);
-  }
+/* 横版剧照：比例本来就接近，直接铺满，不 scale、不模糊，宁可留黑边也不要糊 */
+.hero-bg.wide img {
+  object-position: center 34%;
+  filter: saturate(1.06) brightness(0.9);
+}
+.hero-wide .hero-veil {
+  /* 横版图本身有主视觉，左侧只需要够低的渐变压暗来放标题 */
+  background:
+    linear-gradient(90deg, var(--bg) 0%, rgba(10, 11, 16, 0.92) 26%, rgba(10, 11, 16, 0.42) 52%, rgba(10, 11, 16, 0.08) 82%),
+    linear-gradient(0deg, var(--bg) 0%, rgba(10, 11, 16, 0.5) 10%, transparent 40%),
+    linear-gradient(180deg, rgba(6, 7, 10, 0.72) 0%, transparent 24%);
+}
+
+/* ===== 方案 C：只有竖版封面时，右侧一张窄幅海报卡 ===== */
+/* 2:3 海报塞进 3:1 的横幅只能放大到 4~5 倍糊成色块，
+   索性不铺满：右侧给一张完整海报，左侧纯渐变托住文案。 */
+.hero-poster {
+  position: absolute;
+  z-index: 0;
+  top: calc(var(--topbar-h) + 8px);
+  right: 0;
+  bottom: 0;
+  width: min(46%, 620px);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hero-poster img {
+  height: 100%;
+  max-height: 100%;
+  aspect-ratio: 2 / 3;
+  width: auto;
+  object-fit: cover;
+  object-position: center top;
+  border-radius: 0;
+  filter: saturate(1.02) brightness(0.92);
+  /* 左边缘溶进底色，右边缘铺到屏幕边 */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+}
+/* 海报卡上面再盖一层和 hero-veil 同向的压暗，接到左侧背景 */
+.hero:not(.hero-wide) .hero-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, var(--bg) 0%, rgba(10, 11, 16, 0.86) 34%, rgba(10, 11, 16, 0.5) 62%, rgba(10, 11, 16, 0.2) 100%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 44%);
 }
 .hero-veil {
   position: absolute;
@@ -3354,6 +3406,10 @@ select {
   .hero-thumbs {
     display: none;
   }
+  /* 窄屏：竖版海报卡收窄，别把文案挤扁 */
+  .hero-poster {
+    width: min(40%, 360px);
+  }
   .detail-poster {
     width: 176px;
   }
@@ -3439,7 +3495,21 @@ select {
     linear-gradient(0deg, var(--bg) 1%, transparent 46%);
 }
 :root[data-theme='light'] .hero-bg img {
-  filter: blur(1.5px) saturate(1.05) brightness(1.04);
+  /* 浅色主题不再靠模糊洗掉像素感，改用轻微提亮；横版图保持清晰 */
+  filter: saturate(1.02) brightness(1.02);
+}
+:root[data-theme='light'] .hero-poster img {
+  filter: saturate(1.02) brightness(1.0);
+}
+:root[data-theme='light'] .hero:not(.hero-wide) .hero-bg::after {
+  background:
+    linear-gradient(90deg, var(--bg) 0%, rgba(245, 246, 249, 0.9) 34%, rgba(245, 246, 249, 0.55) 62%, rgba(245, 246, 249, 0.25) 100%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 44%);
+}
+:root[data-theme='light'] .hero-wide .hero-veil {
+  background:
+    linear-gradient(90deg, var(--bg) 0%, rgba(245, 246, 249, 0.94) 28%, rgba(245, 246, 249, 0.4) 56%, rgba(245, 246, 249, 0.06) 86%),
+    linear-gradient(0deg, var(--bg) 0%, transparent 42%);
 }
 /* 浅色主题下，无海报的 hero 用同一套渐变但压淡，避免一块死灰 */
 :root[data-theme='light'] .hero-bg {

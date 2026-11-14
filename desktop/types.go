@@ -115,6 +115,8 @@ type RemoteCard struct {
 	Genres    []string  `json:"genres"`
 	Remarks   string    `json:"remarks"`
 	PosterURL string    `json:"posterUrl"`
+	// BackdropURL 横版剧照（16:9），用于 hero 大图；缺失时前端回退 PosterURL。
+	BackdropURL string `json:"backdropUrl,omitempty"`
 }
 
 // RemoteSection 首页一个分区。
@@ -147,6 +149,7 @@ type RemoteDetail struct {
 	Genres       []string  `json:"genres"`
 	Overview     string    `json:"overview"`
 	PosterURL    string    `json:"posterUrl"`
+	BackdropURL  string    `json:"backdropUrl,omitempty"`
 	Remarks      string    `json:"remarks"`
 	Actors       []string  `json:"actors"`
 	Directors    []string  `json:"directors"`

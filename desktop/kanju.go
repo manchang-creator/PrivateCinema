@@ -218,7 +218,9 @@ type RawCard struct {
 	Area        string   `json:"area"`
 	Genres      []string `json:"genres"`
 	PosterURL   string   `json:"poster_url"`
-	Remarks     string   `json:"remarks"`
+	// 横版剧照（16:9）。首页 hero 大图优先用它；部分条目缺失，缺失时回退竖版海报。
+	BackdropURL string `json:"backdrop_url"`
+	Remarks     string `json:"remarks"`
 }
 
 type RawHome struct {
@@ -247,6 +249,7 @@ type RawDetail struct {
 	Genres            []string `json:"genres"`
 	Description       string   `json:"description"`
 	PosterURL         string   `json:"poster_url"`
+	BackdropURL       string   `json:"backdrop_url"`
 	Remarks           string   `json:"remarks"`
 	Actors            []string `json:"actors"`
 	Directors         []string `json:"directors"`
@@ -332,14 +335,15 @@ func kanjuMapKind(raw string) MediaKind {
 // kanjuMapCard 把原始卡片归一化为 RemoteCard，对应 TS mapCard。
 func kanjuMapCard(card RawCard) RemoteCard {
 	return RemoteCard{
-		ID:        card.ID,
-		Title:     card.Title,
-		Kind:      kanjuMapKind(card.ContentKind),
-		Year:      card.Year,
-		Area:      card.Area,
-		Genres:    kanjuNonNilStrings(card.Genres),
-		Remarks:   card.Remarks,
-		PosterURL: card.PosterURL,
+		ID:          card.ID,
+		Title:       card.Title,
+		Kind:        kanjuMapKind(card.ContentKind),
+		Year:        card.Year,
+		Area:        card.Area,
+		Genres:      kanjuNonNilStrings(card.Genres),
+		Remarks:     card.Remarks,
+		PosterURL:   card.PosterURL,
+		BackdropURL: card.BackdropURL,
 	}
 }
 
@@ -591,6 +595,7 @@ func kanjuDetail(mediaID string) (RemoteDetail, error) {
 		Genres:       kanjuNonNilStrings(raw.Genres),
 		Overview:     raw.Description,
 		PosterURL:    raw.PosterURL,
+		BackdropURL:  raw.BackdropURL,
 		Remarks:      raw.Remarks,
 		Actors:       kanjuNonNilStrings(raw.Actors),
 		Directors:    kanjuNonNilStrings(raw.Directors),

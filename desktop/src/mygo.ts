@@ -113,6 +113,8 @@ export interface RemoteCard {
   genres: string[];
   remarks: string;
   posterUrl: string;
+  /** BackdropURL 横版剧照（16:9），用于 hero 大图；缺失时前端回退 PosterURL。 */
+  backdropUrl?: string;
 }
 
 /** RemoteDetail 远端作品详情。 */
@@ -125,6 +127,7 @@ export interface RemoteDetail {
   genres: string[];
   overview: string;
   posterUrl: string;
+  backdropUrl?: string;
   remarks: string;
   actors: string[];
   directors: string[];

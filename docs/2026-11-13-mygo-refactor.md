@@ -553,3 +553,64 @@ Shell（侧栏 + 顶栏 + 内容视口）
 
 截图：[v5-04-追剧页收藏分段只看已追.png](ui-redesign/v5/v5-04-追剧页收藏分段只看已追.png)、
 [v5-05-行程单星标.png](ui-redesign/v5/v5-05-行程单星标.png)
+
+## 16. Hero 大图改用横版剧照（backdrop_url）+ 竖版海报兜底
+
+### 16.1 问题
+
+首页 hero 背景是把**竖版海报**（2:3，实测《走马上任》270×405）用 `object-fit: cover`
+塞进 ~1271×435（≈2.9:1）的横幅，再 `scale(1.06)` + `blur(2px)`。
+结果是先被 `object-position: 58% 18%` 裁到题字区、人物全被裁掉，再放大 ≈4.7 倍糊成一堵色墙。
+
+上游其实一直提供横版剧照，但后端结构体没接：
+
+```
+poster_url    270×405   2:3    ← 只用了这个
+backdrop_url  640×360   16:9   ← 首页 feed 约 5/7 张 hero 候选有
+carousel_url  640×360   16:9   ← 与 backdrop 同值
+```
+
+### 16.2 改动
+
+**后端**（`backdrop_url` 一路透传，缺失为空串）
+
+- `kanju.go`：`RawCard` / `RawDetail` 增加 `BackdropURL string \`json:"backdrop_url"\``，
+  `kanjuMapCard` / `kanjuDetail` 取值；
+- `types.go`：`RemoteCard` / `RemoteDetail` 增加 `BackdropURL \`json:"backdropUrl,omitempty"\``
+  （`omitempty`，红果短剧等没有该字段的源不产生噪音）；
+- `packages/core/src/shared/ipc.ts`：同名可选字段，`desktop/src/mygo.ts` 由
+  `bun run generate`（`mygo@v0.9.0 generate`）重新生成，**不要手改**。
+
+**前端**
+
+- `HeroItem` 增加 `backdrop?: string`；`HomeScreen` 的 `remoteHero` 映射 `card.backdropUrl`；
+  本地「继续观看」仍无横版，走兜底；
+- `HeroCarousel` 三态：`backdrop` 有 → `hero hero-wide`，`hero-bg wide` 铺满；
+  无横版但有竖版 → 多渲染一张 `.hero-poster` 右侧海报卡；两者都无 → 原有 `posterGradient` 渐变兜底。
+
+**CSS（`src/styles.css`）**
+
+| | 旧 | 新 |
+|---|---|---|
+| 横版图 | 不区分，一律 `scale(1.06)` + `blur(2px)` | `.hero-bg.wide img`：`object-position: center 34%`、无 scale、无 blur，`brightness(0.9)` |
+| 竖版兜底 | 铺满横幅并放大 4.7× | `.hero-poster`：右侧 `width: min(46%, 620px)` 的 2:3 海报卡，`mask-image` 左缘溶进底色，`.hero-bg::after` 同向压暗接缝 |
+| 竖版现铺满 | `object-position: 58% 18%`（题字区） | `50% 38%`（人物区） |
+| 动效 | `hero-zoom` 12s 持续放大（放大器感） | 移除 |
+| 浅色主题 | `blur(1.5px)` | 不模糊，仅提亮；补 `.hero-wide` / `.hero-poster` 两套浅色压暗 |
+| 窄屏（≤1180px） | — | `.hero-poster` 收到 `min(40%, 360px)`；该断点本来已隐藏 `.hero-thumbs`，不会重叠 |
+
+### 16.3 验证
+
+- `bash desktop/scripts/mygo-smoke.sh` → `[PASS]`（截图 [docs/mygo-smoke.png](mygo-smoke.png)）；
+- `bun run build:web`（`tsc --noEmit` + vite）、`go vet ./...` 均通过；
+- 真机（e2e 构建 + `mygo-automation`）：
+  - 横版分支：`.hero` = `hero hero-wide`，`.hero-bg img` 的 `natural` 1280×720、`object-fit: cover`、
+    无 `transform`/`blur`，`.hero-poster` 不渲染 → [v5-06-hero-横版剧照铺满.png](ui-redesign/v5/v5-06-hero-横版剧照铺满.png)；
+  - 兜底分支：点「谷雨」（无 backdrop）→ `hero` 无 `wide`、`.hero-poster img` 存在
+    → [v5-07-hero-竖版海报卡兜底.png](ui-redesign/v5/v5-07-hero-竖版海报卡兜底.png)。
+
+### 16.4 已知限制
+
+- 上游并非每部作品都有 `backdrop_url`（首屏 hero 池约 5/7），缺的就是右侧海报卡；
+- 横版图本身也只有 640×360，铺到 1271 宽的窗口等于放大 2×。比原来的 4.7× 好很多，
+  但要更锐只能等上游给更大的图，或者自己做超分——不在这轮范围。

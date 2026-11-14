@@ -14,6 +14,11 @@ export interface HeroItem {
   id: string
   title: string
   cover: string
+  /**
+   * 横版剧照（16:9）。有它就铺满整块做底图；
+   * 没有时竖版封面只做右侧窄幅海报卡（方案 C），避免 2:3 海报被放大 4 倍裁成一堵色墙。
+   */
+  backdrop?: string
   /** 一行摘要 */
   summary: string
   /** 标签：类型 / 年份 / 地区 / 更新状态 */
@@ -64,23 +69,33 @@ export function HeroCarousel({
   const current = items[safeIndex]
   if (current === undefined) return null
   const cover = proxiedPoster(current.cover)
+  const backdrop = proxiedPoster(current.backdrop ?? '')
+  // 横版优先；真没有横版又没竖版时才是纯渐变兜底
+  const art = backdrop !== '' ? backdrop : cover
 
   return (
     <section
-      className="hero"
+      className={backdrop !== '' ? 'hero hero-wide' : 'hero'}
       aria-label="主推内容"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
       <div
-        className="hero-bg"
+        className={backdrop !== '' ? 'hero-bg wide' : 'hero-bg'}
         aria-hidden="true"
         /* 缺图（本地裸文件没有海报）时用标题散列出的渐变兜底，深/浅主题都能用 */
-        style={cover === '' ? posterGradient(current.title) : undefined}
+        style={art === '' ? posterGradient(current.title) : undefined}
       >
-        {cover !== '' && <img src={cover} alt="" referrerPolicy="no-referrer" />}
+        {art !== '' && <img src={art} alt="" referrerPolicy="no-referrer" />}
         <span className="hero-veil" />
       </div>
+
+      {/* 只有竖版封面时，把它当右侧海报卡（不铺满、不放大），左侧留给文案 */}
+      {backdrop === '' && cover !== '' && (
+        <div className="hero-poster" aria-hidden="true">
+          <img src={cover} alt="" referrerPolicy="no-referrer" />
+        </div>
+      )}
 
       <div className="hero-body" key={current.id}>
         <div className="hero-text">

@@ -173,6 +173,7 @@ export function HomeScreen({
           id: card.id,
           title: card.title,
           cover: card.posterUrl,
+          backdrop: card.backdropUrl,
           summary:
             card.genres.length > 0
               ? `${card.area !== '' ? `${card.area} · ` : ''}${card.genres.join(' / ')}`

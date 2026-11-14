@@ -47,6 +47,11 @@ export interface RemoteCard {
   genres: string[]
   remarks: string
   posterUrl: string
+  /**
+   * 横版剧照（16:9）。首页 hero 大图优先用它；
+   * 上游并非每部作品都有，缺失时前端回退 `posterUrl`。
+   */
+  backdropUrl?: string
 }
 
 /** 首页聚合的一个分区（如「大家都在看」「高分电影」）。 */
@@ -79,6 +84,8 @@ export interface RemoteDetail {
   genres: string[]
   overview: string
   posterUrl: string
+  /** 横版剧照（16:9），详情页大图优先使用；可能缺失 */
+  backdropUrl?: string
   remarks: string
   actors: string[]
   directors: string[]
