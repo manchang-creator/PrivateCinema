@@ -614,3 +614,57 @@ carousel_url  640×360   16:9   ← 与 backdrop 同值
 - 上游并非每部作品都有 `backdrop_url`（首屏 hero 池约 5/7），缺的就是右侧海报卡；
 - 横版图本身也只有 640×360，铺到 1271 宽的窗口等于放大 2×。比原来的 4.7× 好很多，
   但要更锐只能等上游给更大的图，或者自己做超分——不在这轮范围。
+
+## 17. 「本周追剧」横向列表可翻页 + 窗口小窗/置顶
+
+### 17.1 本周追剧的横向列表没有操作入口
+
+**现象**：追剧页（以及首页的紧凑版）四个分类横排（电视剧/动漫/综艺/电影）只能看到前 3~4 张，
+滚轮滚不动、也没有箭头，看着像"数据只有这么几条"。实测宽度 `scrollWidth 950` 塞进 `clientWidth 308`，
+10 张卡只露出约 3 张。
+
+**原因**：这几排是裸 `<div class="week-kind-rail">`，只有 `overflow-x:auto`，
+而 `scrollbar-width:none` + `::-webkit-scrollbar{display:none}` 又把滚动条藏了；
+项目里已有的 `Rail` 组件（纵向滚轮映射横向翻动 + 左右悬浮箭头）**没有接上**。
+
+**改动**：`WeeklyCalendar` 改用 `<Rail className="week-kind-rail">`，空态保留普通 div；
+`styles.css` 的 `.week-kind-rail` 只留 `gap`/`padding` 覆盖，并给 86px 小卡区的箭头缩到 26px 免得盖住海报。
+
+**验证**（e2e 构建 + 真实指针事件）：
+
+```
+xdotool 在窗口内 (411,295) 发 4 次滚轮
+→ {"hits":4,"scrolls":[384,0,0,0]}    // 只有鼠标下那条动了，其它三条不动
+→ 点 rail-nav-next: scrollLeft 0 → 480，fade-left/fade-right 同时激活
+```
+
+### 17.2 窗口小窗 / 置顶
+
+设置页新增「窗口」分组，两项都落盘到 `userData/app-settings.json` 并在启动时还原：
+
+| 开关 | 行为 | 实现 |
+|---|---|---|
+| 小窗模式 | 1280×800 → **560×420**，最小尺寸放到 420×320 | `SetSize` / `SetMinimumSize` / `Center`；最大化时先 `Unmaximize` |
+| 窗口置顶 | 主窗口始终浮于其他窗口之上 | `SetAlwaysOnTop` |
+
+- 后端：[desktop/window.go](desktop/window.go)（`CompactMode`/`SetCompactMode`/`AlwaysOnTop`/`SetAlwaysOnTop`/`applyWindowPrefs`），
+  `main.go` 建窗后 `setMainWindow(win)` + `applyWindowPrefs(win)`；
+- 偏好：`update.go` 的 `appSettings` 加 `compactMode` / `alwaysOnTop`；
+- 前端：`SettingsPage` 新增两张 `Row`，先乐观更新再回滚；`bridge.ts` + `packages/core` 的 `CinemaApi` 同步。
+
+高度取 420 而不是更矮：`.hero` 是 `clamp(380px, 52vh, 520px)`，再矮首屏就只剩 hero 了。
+
+**验证**（Linux X11 真机）：
+
+```
+初始                     1280x800
+setCompactMode(true)   → 560x383（内容区，含装饰 560x420）
+setAlwaysOnTop(true)   → _NET_WM_STATE = _NET_WM_STATE_ABOVE
+setAlwaysOnTop(false)  → _NET_WM_STATE 里 ABOVE 消失
+重启（偏好为 true/true）→ 日志「窗口偏好已还原：置顶=true 小窗=true」
+                          窗口 560x383 + _NET_WM_STATE_ABOVE
+```
+
+**Windows**：`GOOS=windows GOARCH=amd64 go build` + `go vet` 均通过；所依赖的两个 API 在
+`internal/windows/window.go` 有真实原生实现（`SetAlwaysOnTop` → `SetWindowPos(HWND_TOPMOST)`，
+`SetMinimumSize` → WM 的 min track size），不是空壳。

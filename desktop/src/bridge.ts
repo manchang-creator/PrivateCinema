@@ -46,6 +46,10 @@ export async function installCinemaBridge(): Promise<void> {
     restartApp: () => Cinema.restartApp(),
     getAutoUpdate: () => Cinema.getAutoUpdate(),
     setAutoUpdate: (enabled: boolean) => Cinema.setAutoUpdate(enabled),
+    compactMode: () => Cinema.compactMode(),
+    setCompactMode: (enabled: boolean) => Cinema.setCompactMode(enabled),
+    alwaysOnTop: () => Cinema.alwaysOnTop(),
+    setAlwaysOnTop: (enabled: boolean) => Cinema.setAlwaysOnTop(enabled),
   } as unknown as CinemaApi;
 
   window.cinema = api;

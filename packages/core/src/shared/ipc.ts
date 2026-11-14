@@ -221,6 +221,14 @@ export interface CinemaApi {
   getAutoUpdate(): Promise<boolean>
   /** 设置「自动更新」开关。 */
   setAutoUpdate(enabled: boolean): Promise<void>
+  /** 读取「小窗模式」开关。 */
+  compactMode(): Promise<boolean>
+  /** 切换小窗模式（缩到 560×420，关掉回常规尺寸）。 */
+  setCompactMode(enabled: boolean): Promise<void>
+  /** 读取「窗口置顶」开关。 */
+  alwaysOnTop(): Promise<boolean>
+  /** 切换窗口置顶。 */
+  setAlwaysOnTop(enabled: boolean): Promise<void>
 }
 
 /** 应用与更新元信息。 */

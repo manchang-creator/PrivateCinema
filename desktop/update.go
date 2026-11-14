@@ -31,13 +31,16 @@ import (
 // appSettings 存在 userData/app-settings.json 的应用级偏好。
 type appSettings struct {
 	AutoUpdate bool `json:"autoUpdate"`
+	// CompactMode 小窗模式；AlwaysOnTop 窗口置顶。见 window.go。
+	CompactMode bool `json:"compactMode"`
+	AlwaysOnTop bool `json:"alwaysOnTop"`
 }
 
 var (
-	updateMu         sync.Mutex
-	updatePrefsPath  string
-	updatePrefs      *appSettings
-	pendingUpdate    *mygo.Update
+	updateMu        sync.Mutex
+	updatePrefsPath string
+	updatePrefs     *appSettings
+	pendingUpdate   *mygo.Update
 )
 
 // configureUpdate 由主进程启动时注入 userData 目录。

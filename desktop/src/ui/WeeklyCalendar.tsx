@@ -21,6 +21,7 @@ import type { DetailTarget } from '../lib/router'
 import { useFavorites } from '../lib/store'
 import { proxiedPoster } from './PosterCard'
 import { Icon } from './icons'
+import { Rail } from './Rail'
 
 export interface WeeklyCalendarProps {
   board: WeeklyBoard
@@ -307,21 +308,27 @@ export function WeeklyCalendar({
                   <Icon name="chevron-right" size={12} />
                 </button>
               </div>
-              <div className="week-kind-rail">
-                {entries.length === 0 && (
-                  <span className="week-empty">{onlyStarred ? '已追的作品这一周没排更新' : '这一周暂无更新'}</span>
-                )}
-                {entries.slice(0, compact ? 10 : 24).map((entry) => (
-                  <WeekCard
-                    key={`${entry.provider}:${entry.card.id}`}
-                    entry={entry}
-                    star={star}
-                    starred={isStarred(entry.card)}
-                    onOpen={open}
-                    onStar={toggleStar}
-                  />
-                ))}
-              </div>
+              {entries.length === 0 ? (
+                <div className="week-kind-rail">
+                  <span className="week-empty">
+                    {onlyStarred ? '已追的作品这一周没排更新' : '这一周暂无更新'}
+                  </span>
+                </div>
+              ) : (
+                /* 复用 Rail：纵向滚轮横向翻动 + 左右箭头，别让"只能看到这几张"变成死角 */
+                <Rail className="week-kind-rail">
+                  {entries.slice(0, compact ? 10 : 24).map((entry) => (
+                    <WeekCard
+                      key={`${entry.provider}:${entry.card.id}`}
+                      entry={entry}
+                      star={star}
+                      starred={isStarred(entry.card)}
+                      onOpen={open}
+                      onStar={toggleStar}
+                    />
+                  ))}
+                </Rail>
+              )}
             </div>
           )
         })}

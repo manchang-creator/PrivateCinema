@@ -1457,16 +1457,24 @@ select {
 .week-kind-more:hover {
   color: var(--accent-strong);
 }
+/* 现在由 Rail 组件承载（.rail 负责滚动/箭头），这里只收一下间距与内边距 */
 .week-kind-rail {
-  display: flex;
   gap: 10px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 4px;
-  scrollbar-width: none;
+  padding: 2px 0 4px;
 }
 .week-kind-rail::-webkit-scrollbar {
   display: none;
+}
+/* 小卡片区的翻页箭头缩小一号，别盖住 86px 的海报 */
+.week-kind .rail-nav {
+  width: 26px;
+  height: 26px;
+}
+.week-kind .rail-nav-prev {
+  left: -6px;
+}
+.week-kind .rail-nav-next {
+  right: -6px;
 }
 .week-empty {
   font-size: 11.5px;

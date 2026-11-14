@@ -206,6 +206,10 @@ export interface WatchProgress {
 
 /** Cinema 是暴露给前端的服务集合。 */
 export const Cinema = {
+  /** AlwaysOnTop 读取「窗口置顶」开关。 */
+  alwaysOnTop(): Promise<boolean> {
+    return call("Cinema.AlwaysOnTop");
+  },
   /** AppInfo 返回应用与更新的元信息。 */
   appInfo(): Promise<AppInfo> {
     return call("Cinema.AppInfo");
@@ -213,6 +217,10 @@ export const Cinema = {
   /** CheckUpdate 检查是否有新版本。未启用更新的构建直接返回 enabled=false。 */
   checkUpdate(): Promise<UpdateInfo> {
     return call("Cinema.CheckUpdate");
+  },
+  /** CompactMode 读取「小窗模式」开关。 */
+  compactMode(): Promise<boolean> {
+    return call("Cinema.CompactMode");
   },
   /** FindSubtitle 在视频同目录下按同名规则查找字幕，找到则返回文本内容。 */
   findSubtitle(videoPath: string): Promise<SubtitleFile | null> {
@@ -298,6 +306,10 @@ export const Cinema = {
   saveProgress(progress: WatchProgress): Promise<void> {
     return call("Cinema.SaveProgress", progress);
   },
+  /** SetAlwaysOnTop 切换窗口置顶，并把偏好落盘。 */
+  setAlwaysOnTop(enabled: boolean): Promise<void> {
+    return call("Cinema.SetAlwaysOnTop", enabled);
+  },
   /** SetAutoUpdate 设置「自动更新」开关并落盘。 */
   setAutoUpdate(enabled: boolean): Promise<void> {
     return call("Cinema.SetAutoUpdate", enabled);
@@ -305,5 +317,9 @@ export const Cinema = {
   /** SetBrightness 设置某台显示器的亮度，值会被收敛到支持范围。 */
   setBrightness(id: string, value: number): Promise<BrightnessWriteResult> {
     return call("Cinema.SetBrightness", id, value);
+  },
+  /** SetCompactMode 切换小窗模式：改窗口尺寸与最小尺寸，并把偏好落盘。 */
+  setCompactMode(enabled: boolean): Promise<void> {
+    return call("Cinema.SetCompactMode", enabled);
   },
 } as const;

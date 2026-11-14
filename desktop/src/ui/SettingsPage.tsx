@@ -42,6 +42,9 @@ export function SettingsPage(): JSX.Element {
   const [update, setUpdate] = useState<UpdateInfo | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [compact, setCompact] = useState(false)
+  const [onTop, setOnTop] = useState(false)
+  const [windowErr, setWindowErr] = useState<string | null>(null)
   const [autoNext, setAutoNext] = useAutoNext()
   const [rate, setRate] = usePlayerRate()
   const [view, setView] = useViewMode()
@@ -57,6 +60,15 @@ export function SettingsPage(): JSX.Element {
         setAutoUpdate(next.autoUpdate)
       })
       .catch((reason: unknown) => setMessage(errMsg(reason)))
+    // 窗口偏好与 AppInfo 分开读：窗口 API 失败不该影响「关于/更新」整块
+    void window.cinema
+      .compactMode()
+      .then(setCompact)
+      .catch((reason: unknown) => setWindowErr(errMsg(reason)))
+    void window.cinema
+      .alwaysOnTop()
+      .then(setOnTop)
+      .catch((reason: unknown) => setWindowErr(errMsg(reason)))
   }, [])
 
   const chooseTheme = useCallback((next: ThemePref) => {
@@ -91,6 +103,25 @@ export function SettingsPage(): JSX.Element {
       setMessage(friendlyUpdateError(reason))
       setBusy(false)
     }
+  }, [])
+
+  // 先乐观更新 UI，失败再回滚：窗口尺寸变化是即时的，等 IPC 回来才勾会显得卡。
+  const toggleCompact = useCallback((next: boolean) => {
+    setCompact(next)
+    setWindowErr(null)
+    void window.cinema.setCompactMode(next).catch((reason: unknown) => {
+      setCompact(!next)
+      setWindowErr(errMsg(reason))
+    })
+  }, [])
+
+  const toggleOnTop = useCallback((next: boolean) => {
+    setOnTop(next)
+    setWindowErr(null)
+    void window.cinema.setAlwaysOnTop(next).catch((reason: unknown) => {
+      setOnTop(!next)
+      setWindowErr(errMsg(reason))
+    })
   }, [])
 
   const toggleAutoUpdate = useCallback((next: boolean) => {
@@ -130,6 +161,16 @@ export function SettingsPage(): JSX.Element {
               </button>
             ))}
           </div>
+        </Card>
+
+        <Card title="窗口" sub="Window">
+          <Row label="小窗模式" hint="把主窗口缩到 560×420，边看边干别的；关掉回到常规尺寸">
+            <Switch checked={compact} onChange={toggleCompact} label="小窗模式" />
+          </Row>
+          <Row label="窗口置顶" hint="主窗口始终浮在其他窗口之上（全屏应用除外）">
+            <Switch checked={onTop} onChange={toggleOnTop} label="窗口置顶" />
+          </Row>
+          {windowErr !== null && <p className="hint brightness-error">{windowErr}</p>}
         </Card>
 
         <Card title="播放" sub="Playback">

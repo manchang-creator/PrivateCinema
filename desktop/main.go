@@ -71,6 +71,9 @@ func main() {
 		if err := win.SetIcon(appIcon); err != nil {
 			log.Printf("设置窗口图标失败: %v", err)
 		}
+		// 记下主窗口句柄，供「小窗模式 / 窗口置顶」开关使用；随后还原上次的窗口偏好。
+		setMainWindow(win)
+		applyWindowPrefs(win)
 
 		// 4) 启动后按偏好做一次静默自动更新检查（仅正式构建生效）。
 		go autoUpdateOnStart()
