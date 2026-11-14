@@ -18,9 +18,11 @@ import { remotePlaylist, sortEpisodes, kindLabel } from '../lib/media-kit'
 import { getMeta, rememberCard } from '../lib/remote-cache'
 import { TRENDING } from '../lib/remote-cache'
 import type { DetailTarget } from '../lib/router'
+import { rememberCandidate, useWeekOffset, useWeeklyBoard } from '../lib/weekly'
 import { HeroCarousel, type HeroItem } from './HeroCarousel'
 import { PosterCard } from './PosterCard'
 import { Rail, SectionHead } from './Rail'
+import { WeeklyCalendar, todaySummary } from './WeeklyCalendar'
 import { Icon, type IconName } from './icons'
 
 interface Props {
@@ -74,6 +76,10 @@ export function HomeScreen({
   const [sections, setSections] = useState<RemoteSection[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // 本周追剧：日历自己维护数据，货架里出现的连载作品顺手登记成「可能在追」的候选
+  const [weekOffset, setWeekOffset] = useWeekOffset()
+  const weekly = useWeeklyBoard(weekOffset, setWeekOffset)
+
   // 首页聚合：两个片源并发拉，任一失败不影响另一家
   const loadHome = useCallback(() => {
     setSections(null)
@@ -96,7 +102,10 @@ export function HomeScreen({
           if (section === undefined) return
           index += 1
           const provider = REMOTE_PROVIDERS[groupIndex]?.id ?? 'kanju'
-          for (const card of section.cards) rememberCard(provider, card)
+          for (const card of section.cards) {
+            rememberCard(provider, card)
+            rememberCandidate(provider, card)
+          }
           merged.push({
             ...section,
             id: `${provider}-${section.id}-${index}`,
@@ -289,6 +298,14 @@ export function HomeScreen({
         </div>
 
         {error !== null && <div className="notice error">{error}</div>}
+
+        {/* 本周追剧：一眼看到今天更什么、动漫落在一周哪几天；点开发就是完整行程单 */}
+        <WeeklyCalendar
+          board={weekly}
+          compact
+          onOpenDetail={onOpenDetail}
+          headerHint={todaySummary(weekly)}
+        />
 
         {/* 继续观看：只在有本地记录时出现，卡片走 16:9 横排 */}
         {continueRecords.length > 0 && (

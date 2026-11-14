@@ -1174,6 +1174,592 @@ select {
   }
 }
 
+/* ==================== 本周追剧（更新日历） ==================== */
+/* 首页顶部与追剧页共用：上面 7 天格子（今天描边、选中染主色），
+   下面按类型分组横排海报，展开后是一份「日期 → 类型 → 每部一行」的行程单。 */
+
+.week {
+  margin-top: 22px;
+  padding: 18px 20px 20px;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--hairline);
+  background:
+    radial-gradient(120% 100% at 0% 0%, var(--accent-soft), transparent 58%),
+    var(--surface);
+}
+.week-compact {
+  margin-top: 18px;
+}
+
+.week-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.week-head-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent-strong);
+}
+.week-head-text {
+  min-width: 0;
+}
+.week-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.week-sub {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.week-dot {
+  padding: 0 7px;
+  height: 17px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.week-head-side {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+}
+.week-nav-btn {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  transition: background 120ms ease, color 120ms ease;
+}
+.week-nav-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.week-range {
+  padding: 0 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+/* ---- 7 天格子 ---- */
+.week-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.week-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 11px 12px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--hairline);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-2);
+  text-align: left;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+.week-day:hover {
+  background: var(--surface-strong);
+  border-color: var(--hairline-strong);
+  transform: translateY(-1px);
+}
+.week-day.today {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.week-day.active {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+.week-day.active .week-day-name,
+.week-day.active .week-day-count {
+  color: rgba(255, 255, 255, 0.82);
+}
+.week-day.active .week-day-bar {
+  background: rgba(255, 255, 255, 0.25);
+}
+.week-day.active .week-day-bar i {
+  background: #fff;
+}
+.week-day-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.week-day-num {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.week-day.active .week-day-num {
+  color: #fff;
+}
+.week-day-bar {
+  display: block;
+  width: 100%;
+  height: 3px;
+  margin: 6px 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface-strong);
+  overflow: hidden;
+}
+.week-day-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-strong);
+  transition: width 240ms ease;
+}
+.week-day-count {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 类型分组 ---- */
+.week-kinds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px 20px;
+  margin-top: 16px;
+}
+.week-kind {
+  min-width: 0;
+}
+.week-kind.active .week-kind-title {
+  color: var(--accent-strong);
+}
+.week-kind-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.week-kind-title {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.week-kind-count {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.week-kind-more {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.week-kind-more:hover {
+  color: var(--accent-strong);
+}
+.week-kind-rail {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.week-kind-rail::-webkit-scrollbar {
+  display: none;
+}
+.week-empty {
+  font-size: 11.5px;
+  color: var(--text-3);
+  padding: 10px 0;
+}
+
+.week-card {
+  position: relative;
+  flex: none;
+  width: 86px;
+  padding: 0;
+}
+.week-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+.week-card.starred .week-card-title {
+  color: var(--pink);
+}
+
+/* 星标：追剧 = 收藏，小红书式的「点一下就追」 */
+.week-star {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  transition: color 120ms ease, background 120ms ease, transform 120ms ease, opacity 120ms ease;
+}
+.week-star:hover {
+  background: var(--surface-hover);
+  color: var(--pink);
+  transform: scale(1.06);
+}
+.week-star.on {
+  color: var(--pink);
+}
+.week-star.corner {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(6px);
+  opacity: 0;
+}
+.week-card:hover .week-star.corner,
+.week-card:focus-within .week-star.corner,
+.week-star.corner.on {
+  opacity: 1;
+}
+.week-star.corner.on {
+  background: rgba(0, 0, 0, 0.58);
+  color: var(--pink);
+}
+.week-star.corner.on svg {
+  fill: currentColor;
+}
+
+/* 「只看已追」开关 */
+.week-star-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.week-star-chip b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.week-star-chip:hover {
+  border-color: var(--hairline-strong);
+  color: var(--text);
+}
+.week-star-chip.on {
+  border-color: var(--pink);
+  background: rgba(251, 114, 153, 0.14);
+  color: var(--pink);
+}
+.week-star-chip.on svg {
+  fill: currentColor;
+}
+.week-star-chip.on b {
+  color: var(--pink);
+}
+.week-card-art {
+  position: relative;
+  display: block;
+  width: 86px;
+  height: 118px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: linear-gradient(150deg, rgba(122, 162, 255, 0.38), rgba(24, 26, 36, 0.92));
+  box-shadow: var(--shadow-1);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.week-card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.week-card:hover .week-card-art {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card);
+}
+.week-card-day {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+}
+.week-card-title {
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.week-card-sub {
+  font-size: 10.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 展开后的行程单 ---- */
+.week-detail {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.week-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.week-detail-head b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.week-detail-head .link-btn {
+  margin-left: auto;
+}
+.week-detail-filter {
+  color: var(--accent-strong);
+}
+.week-detail-empty {
+  font-size: 12.5px;
+  color: var(--text-3);
+  padding: 10px 0;
+}
+.week-day-block-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.week-day-block-head strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.week-today-tag {
+  padding: 0 7px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent-strong);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+.week-day-block-count {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.week-blank {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--hairline-strong);
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.week-blank .btn-glass.small {
+  height: 28px;
+  margin-left: auto;
+}
+
+.week-rows {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 10px;
+  padding: 6px 0;
+}
+.week-rows + .week-rows {
+  border-top: 1px dashed var(--hairline);
+}
+.week-rows-kind {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-3);
+  padding-top: 6px;
+}
+.week-rows-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 2px 12px;
+}
+.week-row-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--r-sm);
+}
+.week-row-item:hover {
+  background: var(--surface-strong);
+}
+.week-row-item:hover .week-star,
+.week-row-item:focus-within .week-star,
+.week-star.on {
+  opacity: 1;
+}
+.week-row-item .week-star {
+  opacity: 0;
+}
+.week-row-star {
+  margin-right: 4px;
+  color: var(--pink);
+  fill: currentColor;
+  vertical-align: -1px;
+}
+.week-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px 4px 4px;
+  border: none;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+  color: var(--text-2);
+  transition: background 120ms ease, color 120ms ease;
+}
+.week-row:hover {
+  color: var(--text);
+}
+.week-row-art {
+  flex: none;
+  width: 24px;
+  height: 32px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: linear-gradient(150deg, rgba(122, 162, 255, 0.35), rgba(24, 26, 36, 0.9));
+}
+.week-row-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.week-row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.week-row-when {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme='light'] .week-day {
+  background: rgba(16, 18, 28, 0.03);
+}
+:root[data-theme='light'] .week-day.active {
+  color: #fff;
+}
+:root[data-theme='light'] .week-star.corner {
+  background: rgba(255, 255, 255, 0.86);
+  color: rgba(20, 22, 28, 0.6);
+}
+:root[data-theme='light'] .week-star.corner.on {
+  background: rgba(255, 255, 255, 0.9);
+  color: #d6336c;
+}
+:root[data-theme='light'] .week-card-day {
+  background: rgba(255, 255, 255, 0.86);
+  color: #14161c;
+}
+
 /* ==================== 首页：类型快捷入口 ==================== */
 
 .quick-row {
@@ -1693,6 +2279,48 @@ select {
   display: flex;
   justify-content: center;
   margin-top: 24px;
+}
+
+/* 结果网格底部的状态：加载中 / 出错 / 已到底；首屏加载时先铺骨架，不留空白 */
+.grid-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.grid-status.error {
+  color: var(--danger);
+}
+.grid-status .spinner {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid var(--hairline-strong);
+  border-top-color: var(--accent-strong);
+  animation: spin 700ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.sk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sk-card .sk-poster {
+  display: block;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-strong) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.3s infinite linear;
 }
 
 /* ==================== 我的（追剧 / 历史） ==================== */

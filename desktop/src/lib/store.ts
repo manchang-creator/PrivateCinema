@@ -169,6 +169,14 @@ export function useSearchHistory(): {
   }
 }
 
+// ==================== 追剧页分段 ====================
+
+export type FollowingTab = 'continue' | 'favorite' | 'history'
+
+export function useFollowingTab(): [FollowingTab, (next: FollowingTab) => void] {
+  return useStored<FollowingTab>('following-tab', 'continue')
+}
+
 // ==================== 界面偏好 ====================
 
 export type ViewMode = 'grid' | 'list'
