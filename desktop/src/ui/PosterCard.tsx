@@ -6,7 +6,7 @@
 import { useState, type CSSProperties, type JSX } from 'react'
 import { getMediaBase } from '../media'
 import { Icon } from './icons'
-import { monogram, percentOf } from '../lib/media-kit'
+import { percentOf, shortTitle, shortTitleSize } from '../lib/media-kit'
 import { posterGradient } from './palette'
 
 interface Props {
@@ -60,6 +60,11 @@ export function PosterCard({
 }: Props): JSX.Element {
   const [broken, setBroken] = useState(false)
   const src = proxiedPoster(cover)
+  // 三种状态要能看出区别：
+  //   有图且没坏 → 正常封面；有图但加载失败 → broken，显示「封面加载失败」；
+  //   上游本来就没图 → 显示完整短标题 + 类型标签，底色走 posterGradient。
+  const hasCover = src !== ''
+  const placeholder = !hasCover || broken
   const showProgress = progress !== undefined && progress > 0
   const pct = percentOf(progress ?? 0, 100)
 
@@ -72,9 +77,19 @@ export function PosterCard({
         aria-label={title === '' ? '查看详情' : title}
       >
         <span className="pcard-poster" style={posterGradient(title)}>
-          <span className="pcard-art" aria-hidden="true">
-            {monogram(title)}
-          </span>
+          {placeholder && (
+            <span className="pcard-art" aria-hidden="true">
+              <span className="pcard-art-title" style={{ fontSize: `${shortTitleSize(title)}px` }}>
+                {shortTitle(title)}
+              </span>
+              {broken ? (
+                <span className="pcard-art-note">封面加载失败</span>
+              ) : (
+                tag !== undefined &&
+                tag !== '' && <span className="pcard-art-note">{tag}</span>
+              )}
+            </span>
+          )}
           {src !== '' && !broken && (
             <img
               className="pcard-img"

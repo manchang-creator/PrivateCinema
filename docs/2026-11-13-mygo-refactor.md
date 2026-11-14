@@ -668,3 +668,170 @@ setAlwaysOnTop(false)  → _NET_WM_STATE 里 ABOVE 消失
 **Windows**：`GOOS=windows GOARCH=amd64 go build` + `go vet` 均通过；所依赖的两个 API 在
 `internal/windows/window.go` 有真实原生实现（`SetAlwaysOnTop` → `SetWindowPos(HWND_TOPMOST)`，
 `SetMinimumSize` → WM 的 min track size），不是空壳。
+
+## 18. 红果搜索换源：接入网页站接口，封面命中率 80% → 100%（2026-11-14）
+
+### 18.1 问题
+
+红果搜索结果里约 20% 的卡片没有封面。实测采样 4 个关键词（推荐/爱情/总裁/重生）共 20 条，
+4 条空封面。
+
+**根因不在调用姿势**：`openhongguo` SDK 返回的封面是带 `x-expires` 的签名 URL
+（`p3-reading-sign.fqnovelpic.com/...heic?x-signature=`）；空封面那几条（如 `7497644625327637054`
+《推荐一部悬疑片》）连详情接口都返回 `code 101000 content_gone`（SDK 映射为 `KindContentGone`），
+是上游的残缺/已下架记录。
+
+### 18.2 改动：搜索优先走网页站源
+
+新增 [desktop/hongguo_web.go](desktop/hongguo_web.go)：
+
+```
+GET https://hongguoduanju.com/api/search/result?aid=8662&query=<kw>&page=<n>
+Headers: 桌面 Chrome UA / Accept: application/json / Accept-Language: zh-CN / Referer: https://hongguoduanju.com/
+```
+
+- 返回的 `series_cover` 是 CDN 静态地址
+  （`p3-novel.byteimg.com/novel-pic/<hash>~tplv-shrink:640:0.image`），**无签名、长期有效**，
+  域名 `byteimg.com` 已在 [media_server.go](desktop/media_server.go) 的 `posterHostSuffixes` 白名单里；
+- 映射：`series_id` → `ID`、`series_title`（空则退 `item.name`）→ `Title`、
+  `episode_right_text`（空则用 `episode_cnt` 拼「共 N 集」）→ `Remarks`、
+  `category_list[].name` → `Genres`、`create_time`（unix 秒）→ `Year`；
+- 丢弃：`series_id` 非 `/^\d{6,}$/`、标题为空、按 id 重复的条目；
+- 分页：优先 `totalPages` / `totalCount`，缺失时按每页 10 条估算 `hasMore`；
+- 复用 `throttleHongguo`，与 SDK 路径共享同一个进程内最小间隔限流。
+
+**字段类型的坑**：实测 `totalCount` 是**字符串**（`"176"`），而 `pageNum` / `totalPages` 是数字、
+`hasMore` 是布尔。用 `json.Number` + 自定义 `hgFlexInt` 容错解析，脏值归零而不是整体解析失败。
+
+**回退**（[remote.go](desktop/remote.go) 的 `remoteSearch`）：网络错误 / 非 2xx / 解析不出任何卡片
+→ 打一行 `[hongguo] 网页搜索失败，回退 SDK：…` 日志后**静默**走原 SDK 路径（含 `withQuotaRetry`）。
+换源不会成为单点故障。
+
+### 18.3 兜底 UI（即使换源也保留）
+
+[PosterCard.tsx](desktop/src/ui/PosterCard.tsx) 的空封面分支从「单字 monogram」改成：
+
+| 状态 | 表现 |
+|---|---|
+| 上游本来没图 | 完整短标题（最多 4 字 + 省略号，字号 26/22/19 自适应）+ 角标（角标即「全100集」这类更新信息） |
+| 图片加载失败 | 同一底色上显示「封面加载失败」 |
+
+底色仍是 `posterGradient(title)`（同剧颜色稳定）。新增 `shortTitle` / `shortTitleSize`
+（[media-kit.ts](desktop/src/lib/media-kit.ts)），不再使用的 `monogram` 已删除。
+
+### 18.4 验证
+
+**量化指标**（联网实测，`LIVE=1 go test -run TestLiveHongguoWebCoverRate`）：
+
+| 关键词 | 条数 | 有封面 |
+|---|---|---|
+| 推荐 / 爱情 / 总裁 / 重生 | 各 10 条 | 各 10 条 |
+| **合计** | **40** | **40（100%）** |
+
+改前同一批关键词 20 条 4 空（80%），目标 ≥95% → 达成。
+
+**真机（e2e 构建，走完整 TS → Go → 网页源链路）**：
+
+```
+window.cinema.remoteSearch('hongguo', k, 1)
+→ 推荐/爱情/总裁/重生 全 10/10；「短剧」10/10；点「加载更多」后 20 张卡 20 张有图、标题无重复
+```
+
+截图：[docs/hongguo-cover-web.png](docs/hongguo-cover-web.png)（换源后 10/10 有封面）、
+[docs/hongguo-cover-fallback.png](docs/hongguo-cover-fallback.png)（人为触发空封面/加载失败，验证兜底 UI）。
+
+**单测**（[hongguo_web_test.go](desktop/hongguo_web_test.go)，全部离线、走 httptest）：
+
+- 字段映射 / `cover` 回退 / 标题回退 / `episode_cnt` 回退
+- `series_id` 校验、去重、空 `video_data` 过滤
+- 漫剧 → `KindAnime`；`create_time` 脏值 → `Year=0`
+- `totalCount` 字符串容错
+- 空结果 / 403 / 404 必须返回错误（回退契约）
+- 分页参数与请求头
+
+**门禁**：`bash desktop/scripts/mygo-smoke.sh` → `[PASS]`（截图覆盖 [docs/mygo-smoke.png](docs/mygo-smoke.png)）。
+
+### 18.5 许可证
+
+网页接口的地址与字段名来自对公开网页接口的实测；参考仓库 `jackotom/hongguo-drama` 是 **GPL-3.0**，
+本仓库**没有拷贝其任何代码**，[desktop/hongguo_web.go](desktop/hongguo_web.go) 是独立 Go 实现，
+不影响 PrivateCinema 的授权。
+
+### 18.6 已知限制
+
+- 网页接口若改版（路径变、`searchList` 改名），会静默回退 SDK，届时封面命中率回到 ~80%，
+  日志里能看到 `[hongguo] 网页搜索失败，回退 SDK`；
+- 只改了**搜索**。首页/分类浏览（`remoteHome` / `remoteBrowse`）仍走 SDK —— 那边涉及分页游标，
+  且 hero 需要横版剧照，换源要另做一轮；
+- 网页接口没有 `contentType`，`Kind` 只能按分类名里是否含「漫剧」粗略判定，其余一律 `series`；
+- 版本号已升到 **0.1.6** 并装到 `~/.local/private-cinema.app/`（`install.sh` 用户级安装）。
+  `v0.1.x` tag 与 GitHub Release 仍未创建，在线更新链路还没打通。
+
+## 19. 看剧AI 选集只显示 48 集（分页被吞）+ 红果集数核对（2026-11-14）
+
+### 19.1 现象
+
+《沧元图3D动漫版》卡片角标写着「更新至103集」，详情页「选集」却只有 48 集。
+
+### 19.2 根因：上游 `/episodes` 分页，代码只取第一页
+
+`GET /v1/catalog/<id>/episodes` 的原始响应里带着完整分页信息：
+
+```json
+{
+  "episode_count": 103,
+  "available_episode_count": 103,
+  "episode_pagination": {"has_more": true, "limit": 48, "offset": 0,
+                         "returned_count": 48, "total_count": 103},
+  "episodes": [ ... 48 条 ... ]
+}
+```
+
+[kanju.go](desktop/kanju.go) 的 `RawEpisodes` 只声明了 `Episodes` 字段，`kanjuEpisodes` 也只请求一次，
+于是 48 之后的所有集数被静默丢弃。**所有集数 >48 的番剧/剧集都受影响**，不只是这一部。
+
+### 19.3 改动
+
+- `RawEpisodes` 补 `episode_count` / `available_episode_count` / `episode_pagination`（`RawPagination`）；
+- 新增 `kanjuFetchAllEpisodes`：显式传 `limit=200&offset=n`，顺着 `has_more` 翻完；
+  按 `id`（或 `token`）去重、按 `number` 稳定排序；带 `kanjuEpisodeMaxPages=20` 上限防上游
+  `has_more` 永远为 true 造成死循环；集数已达标即提前结束（单页数据只发 1 次请求）；
+- `kanjuEpisodes` 改为调用它，调用方无感；
+- 顺带把 `kanjuBase` 从 const 提成可注入的变量（`kanjuBaseURL()` + `kanjuBaseMu`），
+  生产值仍是 `https://kanju1.com`，只为让分页能用 httptest 测。
+
+### 19.4 红果侧核对（结论：没有同类问题）
+
+红果走的是 SDK 的 `seriesDetail`，一次返回整份 `video_list`，实测：
+
+| 剧 | 卡片/右标 | `ListEpisodes` | 最大集号 |
+|---|---|---|---|
+| 校门口的良心鸡排 | 全45集 | 45 | 45 |
+| 持械入宋：第一季 | 全100集 | 100 | 100 |
+| 初尝玫瑰！ | 全454集 | 454 | 454 |
+
+另测过 1000 集的记录也完整。因此本次问题只在看剧AI片源。
+
+### 19.5 验证
+
+**真机全链路**（`window.cinema.remoteSearch/Detail/Episodes`，走真实 Go 代码）：
+
+```
+{cardRemarks:"更新至103集", detailRemarks:"更新至103集",
+ eps:103, first:"第1集", last:"第103集"}
+```
+
+改前同一路径 `eps:48, last:"第48集"`。
+
+**单测**（[kanju_episodes_test.go](desktop/kanju_episodes_test.go)，httptest 模拟分页上游，全离线）：
+
+- 103 集跨 3 页全部拿到且顺序正确；
+- 集数正好一页时只发 1 次请求（不空翻）；
+- 页数上限存在（防死循环）；
+- `number` / `id` / `token` 映射正确。
+
+**门禁**：`bash desktop/scripts/mygo-smoke.sh` → `[PASS]`；`go vet` / `go test ./...` / Windows 交叉编译均通过。
+
+### 19.6 版本
+
+升到 **0.1.7** 并已重装到 `~/.local/private-cinema.app/`（md5 与构建产物一致）。

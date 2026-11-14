@@ -59,10 +59,20 @@ export function localPlaylist(
   }
 }
 
-/** 首字母（封面缺图时的底纹用）。 */
-export function monogram(title: string): string {
-  const trimmed = title.trim()
-  return trimmed === '' ? '?' : (Array.from(trimmed)[0] ?? '?')
+/**
+ * 空封面兜底用的短标题：最多 4 个字，按字数决定字号。
+ * 只取首字（monogram）时用户分不清「本来没图」和「图挂了」，所以整段短标题更好认。
+ */
+export function shortTitle(title: string): string {
+  const chars = Array.from(title.trim())
+  if (chars.length === 0) return '暂无片名'
+  return chars.length > 4 ? `${chars.slice(0, 4).join('')}…` : chars.join('')
+}
+
+/** 兜底标题字号：2 字最大，4 字最小，保证在 3:4 卡面里不溢出。 */
+export function shortTitleSize(title: string): number {
+  const n = Math.min(Math.max(Array.from(title.trim()).length, 2), 4)
+  return [0, 0, 26, 22, 19][n] ?? 19
 }
 
 export function kindLabel(kind: string): string {

@@ -29,15 +29,17 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // ==================== 常量（照抄 TS）====================
 
 const (
-	kanjuBase            = "https://kanju1.com"
+	kanjuDefaultBase     = "https://kanju1.com"
 	kanjuSecret          = "557d0e4ae929f438da6bd84412374e6086b8af09b3fed54bf22601d5bf8c54a0"
 	kanjuClientName      = "dianyingtiantang-frontend"
 	kanjuClientVersion   = "1.0.0"
@@ -50,6 +52,19 @@ const (
 	kanjuUrlKindMP4 = "mp4"
 	kanjuUrlKindHLS = "hls"
 )
+
+// kanjuBase 是上游站点基址。测试里用 withKanjuBase 临时指向 httptest，
+// 生产路径始终是 https://kanju1.com。
+var kanjuBase = kanjuDefaultBase
+
+// kanjuBaseURL 读取当前基址（加锁，允许测试并发改）。
+func kanjuBaseURL() string {
+	kanjuBaseMu.RLock()
+	defer kanjuBaseMu.RUnlock()
+	return kanjuBase
+}
+
+var kanjuBaseMu sync.RWMutex
 
 // kanjuHTTPClient 全局 http 客户端（对应 fetch 的默认行为，附加超时）。
 var kanjuHTTPClient = &http.Client{Timeout: 30 * time.Second}
@@ -169,7 +184,7 @@ func kanjuRequest[T any](pathname string, opts kanjuRequestOptions) (T, error) {
 		headers["Content-Type"] = "application/json"
 	}
 
-	req, err := http.NewRequest(method, kanjuBase+path, bodyReader)
+	req, err := http.NewRequest(method, kanjuBaseURL()+path, bodyReader)
 	if err != nil {
 		return zero, fmt.Errorf("看剧AI 构造请求失败：%s %s → %v", method, pathname, err)
 	}
@@ -267,6 +282,21 @@ type RawEpisode struct {
 
 type RawEpisodes struct {
 	Episodes []RawEpisode `json:"episodes"`
+	// 这三个字段是上游的分页元信息，缺了它们就会只拿到第一页（默认 limit=48）。
+	// 实测《沧元图3D动漫版》episode_count=103，但 episodes 只回 48 条，
+	// episode_pagination = {"has_more":true,"limit":48,"offset":0,"returned_count":48,"total_count":103}。
+	EpisodeCount      *int           `json:"episode_count"`
+	AvailableCount    *int           `json:"available_episode_count"`
+	EpisodePagination *RawPagination `json:"episode_pagination"`
+}
+
+// RawPagination 上游分页信封。
+type RawPagination struct {
+	HasMore     bool `json:"has_more"`
+	Limit       int  `json:"limit"`
+	Offset      int  `json:"offset"`
+	ReturnedCnt int  `json:"returned_count"`
+	TotalCount  int  `json:"total_count"`
 }
 
 type RawLineOption struct {
@@ -603,9 +633,70 @@ func kanjuDetail(mediaID string) (RemoteDetail, error) {
 	}, nil
 }
 
+const (
+	// kanjuEpisodePageLimit 是单页抓取上限：上游默认 48，这里显式要 200 减少请求数。
+	kanjuEpisodePageLimit = 200
+	// kanjuEpisodeMaxPages 兜底上限，防止上游 has_more 一直为 true 造成死循环（200×20=4000 集）。
+	kanjuEpisodeMaxPages = 20
+)
+
+// kanjuFetchAllEpisodes 顺着 episode_pagination 翻完所有分页，按 number 去重后
+// 返回一个「看起来像单页」的 RawEpisodes（调用方无需感知分页）。
+func kanjuFetchAllEpisodes(mediaID string) (RawEpisodes, error) {
+	collected := make([]RawEpisode, 0, 128)
+	seen := make(map[string]struct{}, 128)
+	total := 0
+
+	for page := 0; page < kanjuEpisodeMaxPages; page++ {
+		query := []kanjuQueryParam{
+			{key: "limit", value: kanjuEpisodePageLimit},
+			{key: "offset", value: page * kanjuEpisodePageLimit},
+		}
+		raw, err := kanjuRequest[RawEpisodes]("/v1/catalog/"+url.PathEscape(mediaID)+"/episodes", kanjuRequestOptions{query: query})
+		if err != nil {
+			return RawEpisodes{}, err
+		}
+		for _, episode := range raw.Episodes {
+			key := episode.ID
+			if key == "" {
+				key = episode.Token
+			}
+			if key != "" {
+				if _, dup := seen[key]; dup {
+					continue
+				}
+				seen[key] = struct{}{}
+			}
+			collected = append(collected, episode)
+		}
+		if raw.EpisodeCount != nil {
+			total = *raw.EpisodeCount
+		}
+		if total > 0 && len(collected) >= total {
+			break
+		}
+		if raw.EpisodePagination == nil || !raw.EpisodePagination.HasMore {
+			break
+		}
+	}
+
+	// 上游有 number 字段时按它排序，保证 UI 顺序稳定（分页拼接不会打乱）。
+	sort.SliceStable(collected, func(i, j int) bool {
+		ni, nj := collected[i].Number, collected[j].Number
+		if ni != nil && nj != nil {
+			return *ni < *nj
+		}
+		return false
+	})
+
+	return RawEpisodes{Episodes: collected}, nil
+}
+
 // kanjuEpisodes 选集列表。
+// 上游按页返回（默认 limit=48），必须顺着 episode_pagination.has_more 翻完，
+// 否则 100+ 集的番剧只会显示前 48 集（详情页集数比角标少一大截）。
 func kanjuEpisodes(mediaID string) ([]RemoteEpisode, error) {
-	raw, err := kanjuRequest[RawEpisodes]("/v1/catalog/"+url.PathEscape(mediaID)+"/episodes", kanjuRequestOptions{})
+	raw, err := kanjuFetchAllEpisodes(mediaID)
 	if err != nil {
 		return nil, err
 	}

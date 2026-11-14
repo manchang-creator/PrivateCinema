@@ -5,7 +5,7 @@ export default defineConfig({
   name: "私人影院",
   slug: "private-cinema",
   identifier: "com.private.cinema",
-  version: "0.1.5",
+  version: "0.1.7",
   devUrl: "http://localhost:5173",
   devCommand: "bun run dev:web",
   buildCommand: "bun run build:web",

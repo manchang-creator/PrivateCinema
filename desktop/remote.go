@@ -21,8 +21,15 @@ func remoteBrowse(provider, kind string, page int) (RemoteBrowsePage, error) {
 }
 
 // remoteSearch 搜索。
+// 红果优先走网页站源（封面完整率高：封面是无签名的 CDN 静态地址），
+// 网络错误 / 非 2xx / 改版解析不出卡片时静默回退 SDK，保证搜索不会因换源而变成单点故障。
 func remoteSearch(provider, keyword string, page int) (RemoteBrowsePage, error) {
 	if provider == "hongguo" {
+		if result, err := hongguoWebSearch(keyword, page); err == nil && len(result.Cards) > 0 {
+			return result, nil
+		} else if err != nil {
+			logHongguoWebFallback(keyword, err)
+		}
 		return withQuotaRetry("search", func() (RemoteBrowsePage, error) { return hongguoSearch(keyword, page) })
 	}
 	return kanjuSearch(keyword, page)
