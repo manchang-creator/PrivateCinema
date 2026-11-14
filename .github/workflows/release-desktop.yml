@@ -110,6 +110,10 @@ jobs:
             desktop/build/linux-amd64/update-*.json
             desktop/build/windows-amd64/*setup*.exe
             desktop/build/windows-amd64/*portable*.zip
+            # 签名自更新清单里 windows 的 url 指向这个 tar.gz；漏传会让 Windows 在线更新 404。
+            desktop/build/windows-amd64/*.tar.gz
+            desktop/build/windows-amd64/*.delta
+            desktop/build/linux-amd64/*.delta
             desktop/build/windows-amd64/update-*.json
             desktop/build/SHA256SUMS
 
