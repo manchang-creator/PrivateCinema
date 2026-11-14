@@ -10,6 +10,9 @@ on:
       version:
         description: '版本号（如 v0.1.1）。留空则使用当前 ref。'
         required: false
+      mirror_base:
+        description: '更新镜像根地址（如 https://dl.example.com/private-cinema）。留空则跳过镜像清单。'
+        required: false
 
 # softprops/action-gh-release 建 Release / 传附件需要 contents: write
 permissions:
@@ -111,6 +114,34 @@ jobs:
           cat desktop/build/linux-amd64/update-*.json desktop/build/windows-amd64/update-*.json 2>/dev/null || true
           echo '--- build dir ---'
           ls -lh desktop/build/linux-amd64 desktop/build/windows-amd64
+
+      # 镜像清单：把 update-<target>.json 里的归档地址改指到镜像（MIRROR_BASE）。
+      # 只做「改写 + 打包上传为 artifact」，真正推到对象存储由 MIRROR_BASE 的持有者在
+      # workflow_dispatch 里填地址后手动 rsync/ossutil；没有填就跳过，不影响常规发布。
+      # 客户端拿到镜像地址后仍会用内置公钥验签（见 docs/update-mirror.md）。
+      - name: Build mirror manifests
+        if: ${{ inputs.mirror_base != '' }}
+        working-directory: desktop
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          for t in windows-amd64 linux-amd64; do
+            src="build/$t/update-$t.json"
+            [ -f "$src" ] || { echo "::warning::$src 不存在（可能缺签名私钥），跳过"; continue; }
+            go run ./cmd/update-mirror -in "$src" -out "dist-mirror/$t/update-$t.json" \
+              -base "${{ inputs.mirror_base }}" -target "$t"
+            mkdir -p "dist-mirror/$t"
+            cp build/$t/*.tar.gz build/$t/*.delta "dist-mirror/$t/" 2>/dev/null || true
+          done
+          echo '--- dist-mirror ---'
+          find dist-mirror -type f | sort
+
+      - name: Upload mirror bundle
+        if: ${{ inputs.mirror_base != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: privatecinema-mirror-${{ steps.ver.outputs.version }}
+          path: desktop/dist-mirror/**
+          if-no-files-found: warn
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
